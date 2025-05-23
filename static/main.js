@@ -71,6 +71,10 @@ videoElem.addEventListener("stalled", (event) => {
     console.log("Seeking!")
 })
 
+videoElem.addEventListener("error", (event) => {
+    console.log(`Error occured! ${event}`)
+})
+
 videoElem.addEventListener("timeupdate", (event) => {
     ws.send(`${PING} ${videoElem.currentTime}`)
     if (Math.abs(last_ts - videoElem.currentTime) > 1) {
@@ -80,12 +84,8 @@ videoElem.addEventListener("timeupdate", (event) => {
     last_ts = videoElem.currentTime;
 })
 
-//if (navigator.getAutoplayPolicy(video) === "allowed") {
-//  // The video element will autoplay with audio.
-//} else if (navigator.getAutoplayPolicy(video) === "allowed-muted") {
-//  // Mute audio on video
-//  video.muted = true;
-//} else if (navigator.getAutoplayPolicy(video) === "disallowed") {
-//  // Set a default placeholder image.
-//  video.poster = "http://example.com/poster_image_url";
-//}
+if (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" || navigator.getAutoplayPolicy(videoElem) === "disallowed") {
+    const newElement = document.createElement("h1");
+    newElement.textContent = "Влючи автоплей, ублюдок"
+    document.getElementsByTagName("body")[0].insertAdjacentElement("beforebegin", newElement)
+}
