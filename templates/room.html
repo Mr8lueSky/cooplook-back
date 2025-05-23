@@ -1,0 +1,19 @@
+<html>
+<head>
+    <script>
+        let room_id = "{{ room_id }}";
+    </script>
+</head>
+<body>
+<h3>You are in a {{ room_id }} room!</h3>
+<form action="/rooms/{{ room_id }}" method="POST">
+    <input id="link" name="link" placeholder="Link to a stuff">
+    <input formmethod="post" type="submit" value="Submit">
+</form>
+<video controls id=video>
+    <source src="/file/{{ video }}" type="video/mp4">
+    Your browser does not support the video tag.
+</video>
+<script src="/static/main.js"></script>
+</body>
+</html>
