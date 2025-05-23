@@ -20,7 +20,6 @@ class LoadingFileResponse(FileResponse):
 
 
     async def _handle_simple(self, send: Send, send_header_only: bool) -> None:
-        print("stat_result", self.stat_result)
         await send({"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers})
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
@@ -38,7 +37,6 @@ class LoadingFileResponse(FileResponse):
     async def _handle_single_range(
         self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
     ) -> None:
-        print("stat_result", self.stat_result)
         self.headers["content-range"] = f"bytes {start}-{end - 1}/{file_size}"
         self.headers["content-length"] = str(end - start)
         await send({"type": "http.response.start", "status": 206, "headers": self.raw_headers})
@@ -66,7 +64,6 @@ class LoadingFileResponse(FileResponse):
         file_size: int,
         send_header_only: bool,
     ) -> None:
-        print("stat_result", self.stat_result)
         # In firefox and chrome, they use boundary with 95-96 bits entropy (that's roughly 13 bytes).
         boundary = token_hex(13)
         content_length, header_generator = self.generate_multipart(

@@ -1,24 +1,62 @@
+let suspend = false;
+let initial = true;
+let last_ts = 0;
+
 let videoElem = document.getElementById("video");
+let fuButton = document.getElementById("force-uns")
+let fsButton = document.getElementById("force-sus")
+
+let peopleCountElem = document.getElementById("people-count");
+let currentStatusElem = document.getElementById("current-status");
 
 
-videoElem.addEventListener("play", (event) => {
+async function play_video() {
+  let promise = videoElem.play();
+  if (promise == undefined) return;
+  promise.then(() => {
+        
+  }).catch(async (error) => {
+      console.log(`Play video error ${error}`)
+    })
+}
+
+async function pause_video() {
+  let promise = videoElem.pause();
+
+if (promise == undefined) return;
+  promise.then(() => {
+        
+  }).catch(error => {
+    console.log(`Failed to pause video ${error}`)
+    })
+}
+
+
+videoElem.addEventListener("play", async (event) => {
+  if (suspend) {
+    await pause_video()
+        return;
+    }
     ws.send(`${PLAY} ${videoElem.currentTime}`)
-    console.log("Play event")
+    currentStatusElem.textContent = "PLAY"   
+  console.log("Play event")
 })
 
-videoElem.addEventListener("pause", (event) => {
+videoElem.addEventListener("pause", async (event) => {
     ws.send(`${PAUSE} ${videoElem.currentTime}`)
-    console.log("Pause event")
+        currentStatusElem.textContent = "PAUSE"  
+  console.log("Pause event")
 })
-
 
 const PLAY = "pl"
 const PAUSE = "pa"
 const PING = "pi"
 const SET_CT = "sc"
 const PEOPLE_COUNT = "pc"
-let initial = true;
-let last_ts = 0;
+const SUSPEND = "sp"
+const UNSUSPEND = "up"
+const FORCE_UNSUSPEND = "fu"
+
 
 async function wsOnMessage(message) {
     let [cmd, ts] = message.data.split(' ')
@@ -28,16 +66,25 @@ async function wsOnMessage(message) {
         videoElem.currentTime = ts;
         last_ts = ts;
     } else if (cmd == PLAY) {
-        videoElem.currentTime = ts;
-        videoElem.play()
+        currentStatusElem.textContent = "PLAY"; 
+      videoElem.currentTime = ts;
+      await play_video()
     } else if (cmd == PAUSE) {
+    currentStatusElem.textContent = "PAUSE";    
+    videoElem.currentTime = ts;
+        await pause_video()
+    } else if (cmd == SUSPEND) {
+currentStatusElem.textContent = "SUSPEND";
         videoElem.currentTime = ts;
-        videoElem.pause()
-    }
+        await pause_video()
+        suspend = true;
+    } else if (cmd == PEOPLE_COUNT) {
+    peopleCountElem.textContent = ts;
+  }
 
     if (initial) {
         message.target.send(`${PAUSE} ${ts}`);
-        videoElem.pause();
+        await pause_video();
         initial = false;
     }
 }
@@ -45,18 +92,29 @@ async function wsOnMessage(message) {
 
 
 let ws = new WebSocket(`/rooms/${room_id}/ws`);
-
 ws.onmessage = wsOnMessage;
 
 
-videoElem.addEventListener("waiting", (event) => {
-    console.log("Waiting!")
-//    ws.send(`${PAUSE} ${videoElem.currentTime}`)
-})
+
+ws.onclose = async () => {
+  console.log("Socket closed.")
+  videoElem.remove();
+  
+}
+
+
+
+//videoElem.addEventListener("waiting", (event) => {
+//    console.log("Waiting!")
+//    ws.send(`${SUSPEND} ${videoElem.currentTime}`)
+//})
 
 videoElem.addEventListener("playing", (event) => {
     console.log("Playing!")
-//    ws.send(`${PLAY} ${videoElem.currentTime}`)
+    if (suspend) {
+        ws.send(`${UNSUSPEND} ${videoElem.currentTime}`)
+        suspend = false;
+    }
 })
 
 videoElem.addEventListener("seeking", (event) => {
@@ -68,11 +126,28 @@ videoElem.addEventListener("seeked", (event) => {
 })
 
 videoElem.addEventListener("stalled", (event) => {
-    console.log("Seeking!")
+    console.log("Stalled!")
 })
 
 videoElem.addEventListener("error", (event) => {
     console.log(`Error occured! ${event}`)
+})
+
+
+videoElem.addEventListener("canplaythrough", (event) => {
+    console.log("can play through!")
+    ws.send(`${UNSUSPEND} ${videoElem.currentTime}`)
+})
+
+
+fuButton.addEventListener("click", (event) => {
+    console.log("Force unsuspend!")
+    ws.send(`${FORCE_UNSUSPEND} ${videoElem.currentTime}`)
+})
+
+fsButton.addEventListener("click", (event) => {
+    console.log("Force suspend!")
+    ws.send(`${SUSPEND} ${videoElem.currentTime}`)
 })
 
 videoElem.addEventListener("timeupdate", (event) => {
