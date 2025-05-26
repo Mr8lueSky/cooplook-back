@@ -1,9 +1,9 @@
+import abc
 import asyncio
 import json
 import logging
-import os.path
 import re
-from asyncio import sleep, wait_for
+from asyncio import wait_for
 from dataclasses import dataclass, field
 from enum import Enum
 from time import time
@@ -14,9 +14,7 @@ from fastapi import FastAPI, Path, Form, WebSocket
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
-from starlette.responses import HTMLResponse, RedirectResponse, JSONResponse
-
-from custom_responses import LoadingFileResponse
+from starlette.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, Response
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"))
@@ -43,10 +41,39 @@ class VideoStatus(str, Enum):
     SUSPEND = SUSPEND
     UNSUSPEND = UNSUSPEND
 
+
+class VideoSource(abc.ABC):
+    def get_player_src(self, room_id: UUID) -> str:
+        return f"/files/{room_id}"
+
+    @abc.abstractmethod
+    def get_video_response(self) -> Response:
+        ...
+
+
+class HttpLinkVideoSource(VideoSource):
+    def __init__(self, link: str):
+        self.link = link
+
+    def get_player_src(self, _: UUID) -> str:
+        return self.link
+
+    def get_video_response(self):
+        raise AttributeError("Don't need to be implemented")
+
+
+class FileVideoSource(VideoSource):
+    def __init__(self, file_path: str):
+        self.file_path = file_path
+
+    def get_video_response(self) -> Response:
+        return FileResponse(self.file_path)
+
+
 @dataclass
 class RoomInfo:
     room_id: UUID
-    video: str
+    video_source: VideoSource
     name: str = field(metadata=dict(validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)))
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
@@ -58,7 +85,7 @@ class RoomInfo:
     def for_temp(self):
         return {
             "room_id": self.room_id,
-            "video": self.video,
+            "video": self.video_source.get_player_src(self.room_id),
             "room_name": self.name
         }
 
@@ -117,14 +144,14 @@ class RoomInfo:
         self.wss[ws_id] = ws
         await self.send_room(f"{PEOPLE_COUNT} {len(self.wss)}")
 
+
 rooms = {
     UUID("75b762ca-37a9-11f0-92c9-00e93a0971c5"): RoomInfo(
         room_id=UUID("75b762ca-37a9-11f0-92c9-00e93a0971c5"),
-        video=VIDEO_PATH,
+        video_source=FileVideoSource("/home/marblesky/Videos/lazarus.mp4"),
         name="First"
     )
 }
-
 
 env = Environment(
     loader=FileSystemLoader(searchpath="templates"),
@@ -132,31 +159,12 @@ env = Environment(
 ROOM_TEMPLATE = env.get_template("room.html")
 
 
-async def file_iterator(path: str, actual_size: int, chunk_size: int = 64 * 1024):
-    print("file iter start")
-    curr_size = 0
-    with open(path, "rb") as file:
-        while curr_size < actual_size:
-            while curr_size + chunk_size > os.path.getsize(path) != actual_size:
-                await sleep(0.1)
-            yield file.read(chunk_size)
-            curr_size += chunk_size
-    print("file iter stop")
-
-
-@app.get("/file/{path}")
-async def get_file(path: str):
-    video_path = "/home/marblesky/Videos/" + path
-    if os.path.isfile(video_path):
-        # StreamingResponse
-        # return StreamingResponse(file_iterator(video_path, 9360944), headers={"content-length": "9360944"})
-        # return FileResponse(video_path)
-        stat_result = os.stat(video_path)
-        stat_result = list(stat_result)
-        stat_result[6] = 9360944
-        return LoadingFileResponse(video_path, stat_result=os.stat_result(stat_result), actual_size=9360944)
-        # return FileResponse(video_path, stat_result=os.stat_result(stat_result))
-    return "Not found"
+@app.get("/files/{room_id}")
+async def get_video_file(room_id: UUID):
+    room = rooms.get(room_id)
+    if room is None:
+        return JSONResponse({"error": "Not found"}, status_code=404)
+    return room.video_source.get_video_response()
 
 
 @app.get('/rooms/{room_id}')
@@ -166,7 +174,6 @@ async def inside_room(room_id: UUID):
     return HTMLResponse(env.get_template("room.html").render(
         **rooms[room_id].for_temp()
     ))
-
 
 
 @app.get('/rooms/{room_id}/stats')
@@ -188,8 +195,6 @@ async def set_to_play(link: str = Form(), room_id: UUID = Path()):
     return RedirectResponse(f"/rooms/{room_id}", status_code=303)
 
 
-
-
 @app.websocket('/rooms/{room_id}/ws')
 async def syncing(websocket: WebSocket, room_id: UUID = Path()):
     if room_id not in rooms:
@@ -208,7 +213,7 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
                 if cmd.startswith(PLAY) or cmd.startswith(PAUSE) or cmd == SUSPEND:
                     await room.change_status(VideoStatus(cmd), by=ws_id)
                 elif cmd.startswith(PING):
-                    if not(ts - MOE <= room.current_time <= ts + MOE):
+                    if not (ts - MOE <= room.current_time <= ts + MOE):
                         await websocket.send_text(f"{SET_CT} {room.current_time}")
                 elif cmd == SET_CT:
                     await room.set_current_time(ts, by=ws_id)
@@ -231,6 +236,7 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
             await room.change_status(VideoStatus.UNSUSPEND)
         await room.send_room(f"{PEOPLE_COUNT} {len(room.wss)}")
         await room.change_status(VideoStatus.PAUSE)
+
 
 @app.get('/')
 async def index():
