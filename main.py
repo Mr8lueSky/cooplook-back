@@ -1,5 +1,6 @@
 import asyncio
 import json
+import logging
 import os.path
 import re
 from asyncio import sleep, wait_for
@@ -23,6 +24,8 @@ app.mount("/static", StaticFiles(directory="static"))
 VIDEO_PATH = "low10.mp4"
 MOE = 1
 
+logger = logging.getLogger(__name__)
+logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
 
 PLAY = "pl"
 PAUSE = "pa"
@@ -46,6 +49,7 @@ class RoomInfo:
     video: str
     name: str = field(metadata=dict(validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)))
     wss: dict[int, WebSocket] = field(default_factory=dict)
+    last_ws_id: int = 0
     _current_time: float = 0
     status: VideoStatus = VideoStatus.PAUSE
     last_change: float = field(default_factory=time)
@@ -65,6 +69,7 @@ class RoomInfo:
         )
 
     async def change_status(self, new_status: VideoStatus, by: int = -1):
+        logger.info(f"Changing status from {self.status} to {new_status}")
         if new_status == self.status:
             return
 
@@ -75,6 +80,7 @@ class RoomInfo:
                 return await self.change_status(VideoStatus.PLAY, by)
 
         if new_status == VideoStatus.SUSPEND:
+            return
             self.suspend_by.add(by)
 
         if new_status == VideoStatus.PAUSE or new_status == VideoStatus.SUSPEND:
@@ -94,6 +100,7 @@ class RoomInfo:
         return self._current_time
 
     async def set_current_time(self, new_time: float, by: int = None):
+        logger.info(f"Set current time from {self._current_time} to {new_time}")
         self._current_time = new_time
         self.last_change = time()
         await self.send_room(f"{SET_CT} {self.current_time}", by)
@@ -187,11 +194,12 @@ async def set_to_play(link: str = Form(), room_id: UUID = Path()):
 async def syncing(websocket: WebSocket, room_id: UUID = Path()):
     if room_id not in rooms:
         await websocket.close(reason="room doesn't exist")
-    ws_id = len(rooms[room_id].wss)
     room = rooms[room_id]
+    ws_id = room.last_ws_id
+    room.last_ws_id += 1
     try:
         await room.initial(websocket, ws_id)
-
+        logger.info(f"Client {ws_id} connected")
         while True:
             try:
                 data = await wait_for(websocket.receive_text(), MOE)
@@ -207,7 +215,8 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
                 elif cmd == FORCE_UNSUSPEND:
                     await room.set_current_time(min(0, room.current_time - 2), ws_id)
                     await room.change_status(VideoStatus.PLAY, ws_id)
-                print("Rc:", ws_id, data)
+                # print("Rc:", ws_id, data)
+                logger.debug(f"Rc: {ws_id}, {data}")
             except TimeoutError:
                 if room.status != VideoStatus.PLAY:
                     continue
@@ -218,8 +227,8 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
         print("\n".join(format_exception(exc)))
         if ws_id in room.wss:
             room.wss.pop(ws_id)
-            if ws_id in room.suspend_by:
-                await room.change_status(VideoStatus.UNSUSPEND)
+        if ws_id in room.suspend_by:
+            await room.change_status(VideoStatus.UNSUSPEND)
         await room.send_room(f"{PEOPLE_COUNT} {len(room.wss)}")
         await room.change_status(VideoStatus.PAUSE)
 

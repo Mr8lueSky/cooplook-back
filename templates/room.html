@@ -7,8 +7,8 @@
 </head>
 <body>
 <h3>You are in a {{ room_id }} room!</h3>
-<h4>People count: <span id="people-count">PAUSE</span></h4>
-<h4>Current status: <span id="current-status"></span></h4>
+<h4>People count: <span id="people-count">0<span></h4>
+<h4>Current status: <span id="current-status">PAUSE</span></h4>
 <form action="/rooms/{{ room_id }}" method="POST">
     <input id="link" name="link" placeholder="Link to a stuff">
     <input formmethod="post" type="submit" value="Submit">
