@@ -103,7 +103,7 @@ class LoadingTorrentFileResponse(FileResponse):
     preload_pieces = 20
 
     def __init__(self, *args, torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
-                 file_index: int = -1, session=None, **kwargs):
+                 file_index: int = -1, pm=None, **kwargs):
         super().__init__(*args, **kwargs)
         if torrent_info is None:
             raise AttributeError("torrent info is not given!")
@@ -114,10 +114,12 @@ class LoadingTorrentFileResponse(FileResponse):
         self.ti = torrent_info
         self.fi = file_index
         self.th = torrent_handle
-        self.ses = session
+        self.pm = pm
 
-    async def _download_range(self, send: Send, start: int, end: int):
+    async def _download_range(self, send: Send, start: int, end: int = -1):
         fs = self.ti.files()
+        if end == -1:
+            end = fs.file_size(self.fi)
 
         prs = self.ti.map_file(self.fi, start, 0)
         piece_start = prs.piece
@@ -139,17 +141,9 @@ class LoadingTorrentFileResponse(FileResponse):
             self.th.piece_priority(curr_piece + self.preload_pieces, 7)
             while not self.th.have_piece(curr_piece):
                 await sleep(0.1)
-            # print("Have piece", curr_piece)
-            self.th.read_piece(curr_piece)
-            piece_found = False
-            while not piece_found:
-                alerts = self.ses.pop_alerts()
-                for a in alerts:
-                    if isinstance(a, lt.read_piece_alert) and a.piece == curr_piece:
-                        buffer = a.buffer
-                        piece_found = True
-                        break
 
+            self.th.read_piece(curr_piece)
+            buffer = await self.pm.get_piece(curr_piece)
             piece_size = fs.piece_size(curr_piece)
             fr, to = 0, piece_size
             if curr_piece == piece_start:
@@ -158,9 +152,10 @@ class LoadingTorrentFileResponse(FileResponse):
                 to = piece_end_offset
 
             for i in range(fr, to, self.chunk_size):
-                await send({"type": "http.response.body",
-                            "body": buffer[i:min(to, i + self.chunk_size)],
-                            "more_body": more_body})
+                yield buffer[i:min(to, i + self.chunk_size)], more_body
+                # await send({"type": "http.response.body",
+                #             "body": buffer[i:min(to, i + self.chunk_size)],
+                #             "more_body": more_body})
 
             curr_piece += 1
 
@@ -169,13 +164,10 @@ class LoadingTorrentFileResponse(FileResponse):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            size_left = self.ti.files().file_size(self.fi)
-            async with await anyio.open_file(self.path, mode="rb") as file:
-                more_body = True
-                while more_body:
-                    chunk = await file.read(self.chunk_size)
-                    more_body = len(chunk) == self.chunk_size
-                    await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
+            async for body, more_body in self._download_range(send, 0):
+                await send({"type": "http.response.body",
+                            "body": body,
+                            "more_body": more_body})
 
     async def _handle_single_range(
             self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
@@ -186,14 +178,10 @@ class LoadingTorrentFileResponse(FileResponse):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async with await anyio.open_file(self.path, mode="rb") as file:
-                await file.seek(start)
-                more_body = True
-                while more_body:
-                    chunk = await file.read(min(self.chunk_size, end - start))
-                    start += len(chunk)
-                    more_body = len(chunk) == self.chunk_size and start < end
-                    await send({"type": "http.response.body", "body": chunk, "more_body": more_body})
+            async for body, more_body in self._download_range(send, start, end):
+                await send({"type": "http.response.body",
+                            "body": body,
+                            "more_body": more_body})
 
     async def _handle_multiple_ranges(
             self,
@@ -213,22 +201,18 @@ class LoadingTorrentFileResponse(FileResponse):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async with await anyio.open_file(self.path, mode="rb") as file:
-                for start, end in ranges:
-                    await send({"type": "http.response.body", "body": header_generator(start, end), "more_body": True})
-                    await file.seek(start)
-                    while start < end:
-                        chunk = await file.read(min(self.chunk_size, end - start))
-                        start += len(chunk)
-                        await send({"type": "http.response.body", "body": chunk, "more_body": True})
-                    await send({"type": "http.response.body", "body": b"\n", "more_body": True})
-                await send(
-                    {
-                        "type": "http.response.body",
-                        "body": f"\n--{boundary}--\n".encode("latin-1"),
-                        "more_body": False,
-                    }
-                )
+            for start, end in ranges:
+                await send({"type": "http.response.body", "body": header_generator(start, end), "more_body": True})
+                async for body, _ in self._download_range(send, start, end):
+                    await send({"type": "http.response.body", "body": body, "more_body": True})
+                await send({"type": "http.response.body", "body": b"\n", "more_body": True})
+            await send(
+                {
+                    "type": "http.response.body",
+                    "body": f"\n--{boundary}--\n".encode("latin-1"),
+                    "more_body": False,
+                }
+            )
 
 
 # Not working
