@@ -6,10 +6,12 @@ import re
 from asyncio import wait_for
 from dataclasses import dataclass, field
 from enum import Enum
+from pathlib import Path as FilePath
 from time import time
 from traceback import format_exception
 from uuid import UUID
 
+import libtorrent as lt
 from fastapi import FastAPI, Path, Form, WebSocket
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
@@ -46,6 +48,9 @@ class VideoSource(abc.ABC):
     def get_player_src(self, room_id: UUID) -> str:
         return f"/files/{room_id}"
 
+    async def start(self):
+        ...
+
     @abc.abstractmethod
     def get_video_response(self) -> Response:
         ...
@@ -65,6 +70,24 @@ class HttpLinkVideoSource(VideoSource):
 class FileVideoSource(VideoSource):
     def __init__(self, file_path: str):
         self.file_path = file_path
+
+    def get_video_response(self) -> Response:
+        return FileResponse(self.file_path)
+
+
+class TorrentVideoSource(VideoSource):
+    def __init__(self, torrent_path: FilePath, file_index: int):
+        self.ti = lt.torrent_info(torrent_path)
+        self.session = lt.session()
+        self.file_index = file_index
+        self.th = None
+
+    def start(self):
+        self.th = self.session.add_torrent(
+            {'ti': self.ti, 'save_path': 'torrents'})
+        total_piece_count = self.ti.files.num_pieces()
+        self.th.prioritize_pieces((i, 0) for i in range(total_piece_count))
+        self.th.prioritize_pieces((i, 7) for i in range(max(10, total_piece_count)))
 
     def get_video_response(self) -> Response:
         return FileResponse(self.file_path)
@@ -90,7 +113,7 @@ class RoomInfo:
         }
 
     async def send_room(self, msg: str, by: int = -1):
-        print("Sn", msg, by)
+        logger.debug(f"Sn r {msg}, {by}")
         await asyncio.gather(
             *(ws.send_text(msg) for ws_id, ws in self.wss.items() if ws_id != by)
         )
@@ -153,6 +176,8 @@ rooms = {
     )
 }
 
+# rooms[UUID("75b762ca-37a9-11f0-92c9-00e93a0971c5")].video_source.start()
+
 env = Environment(
     loader=FileSystemLoader(searchpath="templates"),
 )
@@ -191,7 +216,7 @@ class SetToPlay(BaseModel):
 async def set_to_play(link: str = Form(), room_id: UUID = Path()):
     if room_id not in rooms:
         return HTMLResponse(f"Room {room_id} not found!", status_code=404)
-    print(f"Link is {link}")
+    logger.info(f"Link is {link}")
     return RedirectResponse(f"/rooms/{room_id}", status_code=303)
 
 
@@ -220,12 +245,11 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
                 elif cmd == FORCE_UNSUSPEND:
                     await room.set_current_time(min(0, room.current_time - 2), ws_id)
                     await room.change_status(VideoStatus.PLAY, ws_id)
-                # print("Rc:", ws_id, data)
                 logger.debug(f"Rc: {ws_id}, {data}")
             except TimeoutError:
                 if room.status != VideoStatus.PLAY:
                     continue
-                print(f"Timeout for {ws_id}")
+                logger.info(f"Timeout for {ws_id}")
                 await room.change_status(VideoStatus.SUSPEND, ws_id)
 
     except Exception as exc:
