@@ -116,7 +116,7 @@ class LoadingTorrentFileResponse(FileResponse):
         self.th = torrent_handle
         self.pm = pm
 
-    async def _download_range(self, send: Send, start: int, end: int = -1):
+    async def _download_range(self, start: int, end: int = -1):
         fs = self.ti.files()
         if end == -1:
             end = fs.file_size(self.fi)
@@ -153,9 +153,6 @@ class LoadingTorrentFileResponse(FileResponse):
 
             for i in range(fr, to, self.chunk_size):
                 yield buffer[i:min(to, i + self.chunk_size)], more_body
-                # await send({"type": "http.response.body",
-                #             "body": buffer[i:min(to, i + self.chunk_size)],
-                #             "more_body": more_body})
 
             curr_piece += 1
 
@@ -164,7 +161,7 @@ class LoadingTorrentFileResponse(FileResponse):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async for body, more_body in self._download_range(send, 0):
+            async for body, more_body in self._download_range(0):
                 await send({"type": "http.response.body",
                             "body": body,
                             "more_body": more_body})
@@ -178,7 +175,7 @@ class LoadingTorrentFileResponse(FileResponse):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async for body, more_body in self._download_range(send, start, end):
+            async for body, more_body in self._download_range(start, end):
                 await send({"type": "http.response.body",
                             "body": body,
                             "more_body": more_body})
@@ -203,7 +200,7 @@ class LoadingTorrentFileResponse(FileResponse):
         else:
             for start, end in ranges:
                 await send({"type": "http.response.body", "body": header_generator(start, end), "more_body": True})
-                async for body, _ in self._download_range(send, start, end):
+                async for body, _ in self._download_range(start, end):
                     await send({"type": "http.response.body", "body": body, "more_body": True})
                 await send({"type": "http.response.body", "body": b"\n", "more_body": True})
             await send(
