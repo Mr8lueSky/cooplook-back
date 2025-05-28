@@ -87,7 +87,7 @@ async def download_range(start, end):
         torrent_info=ti,
         torrent_handle=th,
         file_index=FILE_INDEX,
-        pm=PieceManager(session)
+        piece_manager=PieceManager(session)
     )
     # send: Send, start: int, end: int, file_size: int, send_header_only: bool
     await response._handle_single_range(send, start, end, 0, False)
@@ -100,6 +100,8 @@ async def main():
     await download_range(0, size)
     await download_range(1000, 1000000)
     await download_range(123456, 7486720)
+    await download_range(0, 9469952)
+    await download_range(1035272192, 1035305458)
 
 
 if __name__ == '__main__':
