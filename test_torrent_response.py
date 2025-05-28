@@ -5,6 +5,7 @@ from asyncio import sleep
 import libtorrent as lt
 
 from custom_responses import LoadingTorrentFileResponse
+from main import PieceManager
 
 TORRENT_FILE = "test.torrent"
 
@@ -32,26 +33,26 @@ th.prioritize_pieces((i, 0) for i in range(ti.files().num_pieces()))
 th.piece_priority(piece_start, 7)
 
 
-class PieceManager:
-    def __init__(self, session):
-        self.piece_buffer = {}
-        self.piece_wait = {}
-        self.ses = session
-
-    async def get_piece(self, piece_id: int):
-        self.piece_wait[piece_id] = self.piece_wait.get(piece_id, 0) + 1
-        while piece_id not in self.piece_buffer:
-            alerts = self.ses.pop_alerts()
-            for a in alerts:
-                if isinstance(a, lt.read_piece_alert):
-                    self.piece_buffer[piece_id] = a.buffer
-            await sleep(0.001)
-        buffer = self.piece_buffer[piece_id]
-        self.piece_wait[piece_id] -= 1
-        if not self.piece_wait[piece_id]:
-            self.piece_wait.pop(piece_id)
-            self.piece_buffer.pop(piece_id)
-        return buffer
+# class PieceManager:
+#     def __init__(self, session):
+#         self.piece_buffer = {}
+#         self.piece_wait = {}
+#         self.ses = session
+#
+#     async def get_piece(self, piece_id: int):
+#         self.piece_wait[piece_id] = self.piece_wait.get(piece_id, 0) + 1
+#         while piece_id not in self.piece_buffer:
+#             alerts = self.ses.pop_alerts()
+#             for a in alerts:
+#                 if isinstance(a, lt.read_piece_alert):
+#                     self.piece_buffer[piece_id] = a.buffer
+#             await sleep(0.001)
+#         buffer = self.piece_buffer[piece_id]
+#         self.piece_wait[piece_id] -= 1
+#         if not self.piece_wait[piece_id]:
+#             self.piece_wait.pop(piece_id)
+#             self.piece_buffer.pop(piece_id)
+#         return buffer
 
 
 async def download_range(start, end):

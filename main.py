@@ -3,7 +3,7 @@ import asyncio
 import json
 import logging
 import re
-from asyncio import wait_for, sleep
+from asyncio import wait_for
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path as FilePath
@@ -18,7 +18,7 @@ from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
 from starlette.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, Response
 
-from custom_responses import LoadingTorrentFileResponse
+from custom_responses import LoadingTorrentFileResponse, PieceManager
 
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"))
@@ -77,35 +77,6 @@ class FileVideoSource(VideoSource):
         return FileResponse(self.file_path)
 
 
-class PieceManager:
-    def __init__(self, session, th):
-        self.piece_buffer = {}
-        self.piece_wait = {}
-        self.ses = session
-        self.th = th
-
-    async def get_piece(self, piece_id: int, timeout_s: int = 5):
-        if not self.piece_wait.get(piece_id):
-            self.th.read_piece(piece_id)
-        self.piece_wait[piece_id] = self.piece_wait.get(piece_id, 0) + 1
-        start = time()
-        while piece_id not in self.piece_buffer and start + timeout_s > time():
-            alerts = self.ses.pop_alerts()
-            for a in alerts:
-                if isinstance(a, lt.read_piece_alert):
-                    self.piece_buffer[a.piece] = a.buffer
-            await sleep(0.001)
-
-        if piece_id not in self.piece_buffer:
-            raise AttributeError(f"{piece_id} not read in {timeout_s}")
-        buffer = self.piece_buffer[piece_id]
-        self.piece_wait[piece_id] -= 1
-        if not self.piece_wait[piece_id]:
-            self.piece_wait.pop(piece_id)
-            self.piece_buffer.pop(piece_id)
-        return buffer
-
-
 class TorrentVideoSource(VideoSource):
     SAVE_PATH = 'torrents'
 
@@ -123,7 +94,7 @@ class TorrentVideoSource(VideoSource):
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         for i in range(10):
             self.th.piece_priority(self.ti.map_file(self.fi, 0, 0).piece + i, 7)
-        self.pm = PieceManager(self.session, self.th)
+        self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
 
     def get_video_response(self) -> Response:
         # torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
@@ -131,9 +102,6 @@ class TorrentVideoSource(VideoSource):
         files = self.ti.files()
         return LoadingTorrentFileResponse(
             files.file_path(self.fi, self.SAVE_PATH),
-            torrent_info=self.ti,
-            torrent_handle=self.th,
-            file_index=self.fi,
             piece_manager=self.pm
         )
 

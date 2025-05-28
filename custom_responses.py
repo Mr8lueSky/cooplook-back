@@ -1,7 +1,7 @@
 import os
 from asyncio import sleep
 from secrets import token_hex
-from time import sleep as sync_sleep
+from time import sleep as sync_sleep, time
 
 import anyio
 import libtorrent as lt
@@ -99,57 +99,101 @@ class LoadingFileResponse(FileResponse):
                 )
 
 
+class PieceManager:
+    preload_pieces = 10
+    """torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
+                 file_index: int = -1"""
+
+    def __init__(self, session: lt.session, th: lt.torrent_handle, ti: lt.torrent_info,
+                 file_index: int):
+        self.piece_buffer = {}
+        self.piece_wait = {}
+        self.ses = session
+        self.th = th
+        self.ti = ti
+        self.fi = file_index
+
+    def bytes_to_piece_offset(self, b: int):
+        pr = self.ti.map_file(self.fi, b, 0)
+        return pr.piece, pr.start
+
+    def file_size(self):
+        return self.ti.files.file_size(self.fi)
+
+    def initiate(self):
+        p_start, _ = self.bytes_to_piece_offset(0)
+        self.th.prioritize_pieces(
+            (i, 7) for i in range(p_start, p_start + self.preload_pieces) if not self.th.have_piece(i))
+        print(f"Prioritizing from {p_start} to {p_start + self.preload_pieces}")
+
+    def prioritize_pieces(self, prior: int, start: int, end: int):
+        self.th.prioritize_pieces(
+            (i, prior) for i in range(start, end)
+        )
+        print(
+            f"Prioritizing from {start} to {min(end + self.preload_pieces, end)} for {start, end}")
+
+    async def get_piece(self, piece_id: int, timeout_s: int = 15):
+        if not self.th.have_piece(piece_id + self.preload_pieces):
+            self.th.piece_priority(piece_id + self.preload_pieces, 7)
+        self.th.set_piece_deadline(piece_id, 10, 1)
+
+        finish = time() + timeout_s
+
+        while not self.th.have_piece(piece_id) and finish > time():
+            await sleep(0.001)
+
+        if not self.th.have_piece(piece_id):
+            raise AttributeError(f"Don't have {piece_id} after {timeout_s}!")
+
+        self.piece_wait[piece_id] = self.piece_wait.get(piece_id, 0) + 1
+
+        while piece_id not in self.piece_buffer and finish > time():
+            alerts = self.ses.pop_alerts()
+            for a in alerts:
+                if isinstance(a, lt.read_piece_alert) and self.piece_wait.get(a.piece):
+                    self.piece_buffer[a.piece] = a.buffer
+            await sleep(0.001)
+
+        if piece_id not in self.piece_buffer:
+            raise AttributeError(f"{piece_id} not read in {timeout_s}")
+        buffer = self.piece_buffer[piece_id]
+        self.piece_wait[piece_id] -= 1
+        if not self.piece_wait[piece_id]:
+            self.piece_wait.pop(piece_id)
+            self.piece_buffer.pop(piece_id)
+        return buffer
+
+
 class LoadingTorrentFileResponse(FileResponse):
     chunk_size = 64 * 1024
     preload_pieces = 10
 
-    def __init__(self, *args, torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
-                 file_index: int = -1, piece_manager=None, **kwargs):
+    def __init__(self, *args, piece_manager: PieceManager = None, **kwargs):
         super().__init__(*args, **kwargs)
         while not os.path.isfile(self.path):
             sync_sleep(0.001)
-        if torrent_info is None:
-            raise AttributeError("torrent info is not given!")
-        if torrent_handle == -1:
-            raise AttributeError("torrent handle is not given")
-        if file_index == -1:
-            raise AttributeError("file index is not given")
         if piece_manager is None:
             raise AttributeError("piece manager is not given")
-        self.ti = torrent_info
-        self.fi = file_index
-        self.th = torrent_handle
         self.pm = piece_manager
 
     async def _download_range(self, start: int, end: int = -1):
         print("Download range started")
-        fs = self.ti.files()
         if end == -1:
-            end = fs.file_size(self.fi)
+            end = self.pm.file_size()
 
-        prs = self.ti.map_file(self.fi, start, 0)
-        piece_start = prs.piece
-        piece_start_offset = prs.start
+        piece_start, piece_start_offset = self.pm.bytes_to_piece_offset(start)
 
-        pre = self.ti.map_file(self.fi, end, 0)
-        piece_end = pre.piece
-        piece_end_offset = pre.start
+        piece_end, piece_end_offset = self.pm.bytes_to_piece_offset(end)
 
         curr_piece = piece_start
 
-        self.th.prioritize_pieces(
-            (i, 7) for i in range(piece_start, min(piece_start + self.preload_pieces, piece_end + 1)))
-        print(
-            f"Prioritizing from {piece_start} to {min(piece_start + self.preload_pieces, piece_end)} for {start, end}")
+        self.pm.initiate()
         more_body = True
 
         while more_body:
-            self.th.piece_priority(curr_piece + self.preload_pieces, 7)
-            while not self.th.have_piece(curr_piece):
-                await sleep(0.01)
-
             buffer = await self.pm.get_piece(curr_piece)
-            piece_size = fs.piece_size(curr_piece)
+            piece_size = len(buffer)
             fr, to = 0, piece_size
             if curr_piece == piece_start:
                 fr = piece_start_offset
