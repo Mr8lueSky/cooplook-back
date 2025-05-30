@@ -124,7 +124,7 @@ videoElem.addEventListener("playing", (event) => {
 
 videoElem.addEventListener("canplaythrough", (event) => {
   console.log("can play through!")
-  ws.send(`${UNSUSPEND} ${videoElem.currentTime}`)
+  //ws.send(`${UNSUSPEND} ${videoElem.currentTime}`)
 })
 
 
