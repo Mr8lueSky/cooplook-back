@@ -16,7 +16,13 @@ from fastapi import FastAPI, Path, Form, WebSocket, Request
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 from pydantic import BaseModel
-from starlette.responses import HTMLResponse, RedirectResponse, JSONResponse, FileResponse, Response
+from starlette.responses import (
+    HTMLResponse,
+    RedirectResponse,
+    JSONResponse,
+    FileResponse,
+    Response,
+)
 
 from custom_responses import LoadingTorrentFileResponse, PieceManager
 
@@ -27,7 +33,7 @@ VIDEO_PATH = "low10.mp4"
 MOE = 1
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename='example.log', encoding='utf-8', level=logging.DEBUG)
+logging.basicConfig(filename="example.log", encoding="utf-8", level=logging.DEBUG)
 
 PLAY = "pl"
 PAUSE = "pa"
@@ -50,22 +56,20 @@ class VideoSource(abc.ABC):
     def get_player_src(self, room_id: UUID) -> str:
         return f"/files/{room_id}"
 
-    async def start(self):
-        ...
+    def start(self): ...
 
     @abc.abstractmethod
-    def get_video_response(self) -> Response:
-        ...
+    def get_video_response(self, request) -> Response: ...
 
 
 class HttpLinkVideoSource(VideoSource):
     def __init__(self, link: str):
         self.link = link
 
-    def get_player_src(self, _: UUID) -> str:
+    def get_player_src(self, *_, **__) -> str:
         return self.link
 
-    def get_video_response(self):
+    def get_video_response(self, request):
         raise AttributeError("Don't need to be implemented")
 
 
@@ -73,44 +77,48 @@ class FileVideoSource(VideoSource):
     def __init__(self, file_path: str):
         self.file_path = file_path
 
-    def get_video_response(self) -> Response:
+    def get_video_response(self, request) -> Response:
         return FileResponse(self.file_path)
 
 
 class TorrentVideoSource(VideoSource):
-    SAVE_PATH = 'torrents'
+    SAVE_PATH = "torrents"
 
     def __init__(self, torrent_path: FilePath | str, file_index: int):
         self.ti = lt.torrent_info(torrent_path)
         self.session = lt.session()
         self.fi = file_index
         self.th = None
-        self.pm = None
+        self.pm: PieceManager | None = None
 
     def start(self):
-        self.th = self.session.add_torrent(
-            {'ti': self.ti, 'save_path': 'torrents'})
+        self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
         self.ti.map_file(self.fi, 0, 0)
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         for i in range(10):
             self.th.piece_priority(self.ti.map_file(self.fi, 0, 0).piece + i, 7)
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
 
-    def get_video_response(self) -> Response:
+    def get_video_response(self, request) -> Response:
         # torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
         # file_index: int = -1, piece_manager=None,
         files = self.ti.files()
-        return LoadingTorrentFileResponse(
-            files.file_path(self.fi, self.SAVE_PATH),
-            piece_manager=self.pm
+        r = LoadingTorrentFileResponse(
+            files.file_path(self.fi, self.SAVE_PATH), piece_manager=self.pm
         )
+        r.request = request
+        return r
 
 
 @dataclass
 class RoomInfo:
     room_id: UUID
     video_source: VideoSource
-    name: str = field(metadata=dict(validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)))
+    name: str = field(
+        metadata=dict(
+            validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)
+        )
+    )
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
     _current_time: float = 0
@@ -122,7 +130,7 @@ class RoomInfo:
         return {
             "room_id": self.room_id,
             "video": self.video_source.get_player_src(self.room_id),
-            "room_name": self.name
+            "room_name": self.name,
         }
 
     async def send_room(self, msg: str, by: int = -1):
@@ -162,7 +170,7 @@ class RoomInfo:
             return self._current_time + time() - self.last_change
         return self._current_time
 
-    async def set_current_time(self, new_time: float, by: int = None):
+    async def set_current_time(self, new_time: float, by: int):
         logger.info(f"Set current time from {self._current_time} to {new_time}")
         self._current_time = new_time
         self.last_change = time()
@@ -170,12 +178,8 @@ class RoomInfo:
 
     async def initial(self, ws: WebSocket, ws_id: int):
         await ws.accept()
-        await ws.send_text(
-            f"{SET_CT} {self.current_time}"
-        )
-        await ws.send_text(
-            f"{PEOPLE_COUNT} {len(self.wss)}"
-        )
+        await ws.send_text(f"{SET_CT} {self.current_time}")
+        await ws.send_text(f"{PEOPLE_COUNT} {len(self.wss)}")
         await self.send_current_status()
         self.wss[ws_id] = ws
         await self.send_room(f"{PEOPLE_COUNT} {len(self.wss)}")
@@ -190,18 +194,19 @@ else:
     TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
     VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
 
+torrent_vs = TorrentVideoSource("test.torrent", 1)
+
 rooms = {
     TORRENT_ROOM_UUID: RoomInfo(
-        room_id=TORRENT_ROOM_UUID,
-        video_source=TorrentVideoSource("test.torrent", 1),
-        name="From torrent"
+        room_id=TORRENT_ROOM_UUID, video_source=torrent_vs, name="From torrent"
     ),
     VIDEO_ROOM_UUID: RoomInfo(
         room_id=VIDEO_ROOM_UUID,
         video_source=FileVideoSource(
-            'torrents/Kijin Gentoushou - AniLibria [WEBRip 1080p]/Kijin_Gentosho_[02]_[AniLibria]_[WEBRip_1080p].mkv'),
-        name="From file"
-    )
+            "torrents/Kijin Gentoushou - AniLibria [WEBRip 1080p]/Kijin_Gentosho_[02]_[AniLibria]_[WEBRip_1080p].mkv"
+        ),
+        name="From file",
+    ),
 }
 
 rooms[TORRENT_ROOM_UUID].video_source.start()
@@ -217,15 +222,26 @@ i = 0
 
 @app.get("/priorities/")
 async def get_priorities():
-    return [(i, a) for i, a in enumerate(rooms[TORRENT_ROOM_UUID].video_source.pm.th.get_piece_priorities())]
+    if torrent_vs.pm is None:
+        return ""
+    return [(i, a) for i, a in enumerate(torrent_vs.pm.th.get_piece_priorities())]
 
 
 @app.get("/from_torrent")
 def from_torrent():
-    return HTMLResponse(f"""<video controls id=video width="640" height="480">
+    return HTMLResponse(
+        f"""<video controls id=video width="640" height="480">
     <source src="/files/{TORRENT_ROOM_UUID}" type="video/mp4">
     Your browser does not support the video tag.
-</video>""")
+</video>
+<script>
+let videoElem = document.getElementById("video")
+
+videoElem.addEventListener("canplay", (event) => {{console.log("canplay")}} )
+videoElem.addEventListener("waiting", (event) => {{console.log("waitingsolong")}} )
+</script>
+"""
+    )
 
 
 @app.get("/files/{room_id}")
@@ -237,30 +253,28 @@ async def get_video_file(room_id: UUID, request: Request):
     # with open(f'headers/{i}', 'w') as file:
     #     json.dump(dict(request.headers), file)
     # i += 1
-    return room.video_source.get_video_response()
+    return room.video_source.get_video_response(request)
 
 
-@app.get('/rooms/{room_id}')
+@app.get("/rooms/{room_id}")
 async def inside_room(room_id: UUID):
     if room_id not in rooms:
         return HTMLResponse(f"Room {room_id} not found!", status_code=404)
-    return HTMLResponse(env.get_template("room.html").render(
-        **rooms[room_id].for_temp()
-    ))
+    return HTMLResponse(
+        env.get_template("room.html").render(**rooms[room_id].for_temp())
+    )
 
 
-@app.get('/rooms/')
+@app.get("/rooms/")
 async def list_rooms():
     rooms_html = []
     for room_id, room_info in rooms.items():
-        rooms_html.append(
-            f'<a href="/rooms/{room_id}">{room_info.name}</a>'
-        )
+        rooms_html.append(f'<a href="/rooms/{room_id}">{room_info.name}</a>')
     return HTMLResponse(f"""{"<br>".join(rooms_html)}""")
 
 
-@app.get('/rooms/{room_id}/stats')
-async def inside_room(room_id: UUID):
+@app.get("/rooms/{room_id}/stats")
+async def get_stats(room_id: UUID):
     if room_id not in rooms:
         return HTMLResponse(f"Room {room_id} not found!", status_code=404)
     return JSONResponse(json.dumps(rooms[room_id], default=lambda o: str(o)))
@@ -270,7 +284,7 @@ class SetToPlay(BaseModel):
     link: str
 
 
-@app.post('/rooms/{room_id}')
+@app.post("/rooms/{room_id}")
 async def set_to_play(link: str = Form(), room_id: UUID = Path()):
     if room_id not in rooms:
         return HTMLResponse(f"Room {room_id} not found!", status_code=404)
@@ -278,7 +292,7 @@ async def set_to_play(link: str = Form(), room_id: UUID = Path()):
     return RedirectResponse(f"/rooms/{room_id}", status_code=303)
 
 
-@app.websocket('/rooms/{room_id}/ws')
+@app.websocket("/rooms/{room_id}/ws")
 async def syncing(websocket: WebSocket, room_id: UUID = Path()):
     if room_id not in rooms:
         await websocket.close(reason="room doesn't exist")
@@ -291,7 +305,7 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
         while True:
             try:
                 data = await wait_for(websocket.receive_text(), MOE)
-                cmd, ts = data.split(' ')
+                cmd, ts = data.split(" ")
                 ts = float(ts)
                 if cmd.startswith(PLAY) or cmd.startswith(PAUSE) or cmd == SUSPEND:
                     await room.change_status(VideoStatus(cmd), by=ws_id)
@@ -320,6 +334,6 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
         await room.change_status(VideoStatus.PAUSE)
 
 
-@app.get('/')
+@app.get("/")
 async def index():
     return RedirectResponse(f"/rooms/{str(TORRENT_ROOM_UUID)}", 303)
