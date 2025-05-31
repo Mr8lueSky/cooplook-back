@@ -16,7 +16,6 @@ app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"))
 
 logger = logging.getLogger(__name__)
-logging.basicConfig(filename="example.log", encoding="utf-8", level=logging.DEBUG)
 
 
 random = False
@@ -54,6 +53,13 @@ async def get_priorities():
     if torrent_vs.pm is None:
         return ""
     return [(i, a) for i, a in enumerate(torrent_vs.pm.th.get_piece_priorities())]
+
+
+@app.get("/have/{piece_id}")
+async def have_piece(piece_id: int):
+    if not torrent_vs.pm:
+        return ""
+    return torrent_vs.pm.th.have_piece(piece_id)
 
 
 @app.get("/from_torrent")
@@ -114,7 +120,6 @@ class SetToPlay(BaseModel):
 async def set_to_play(link: str = Form(), room_id: UUID = Path()):
     if room_id not in rooms:
         return HTMLResponse(f"Room {room_id} not found!", status_code=404)
-    logger.info(f"Link is {link}")
     return RedirectResponse(f"/rooms/{room_id}", status_code=303)
 
 

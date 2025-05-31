@@ -53,6 +53,7 @@ class TorrentVideoSource(VideoSource):
         self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
         self.ti.map_file(self.fi, 0, 0)
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
+        self.pm.on_download_start()
 
     def cancel(self):
         for r in self.resps:

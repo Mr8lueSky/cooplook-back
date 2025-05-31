@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import re
 from asyncio import wait_for
 from dataclasses import dataclass, field
@@ -10,14 +9,14 @@ from starlette.websockets import WebSocketDisconnect
 from fastapi import WebSocket
 
 from cmds import VideoStatus, Commands
+from logger import Logging
 from video_sources import VideoSource
 
-logger = logging.getLogger(__name__)
 MOE = 1
 
 
 @dataclass
-class RoomInfo:
+class RoomInfo(Logging):
     room_id: UUID
     video_source: VideoSource
     name: str = field(
@@ -44,13 +43,13 @@ class RoomInfo:
         await self.wss[to].send_text(msg)
 
     async def send_room(self, msg: str, by: int = -1):
-        logger.debug(f"Sn room {msg}, {by}")
+        self.logger.debug(f"Sn room {msg}, {by}")
         await asyncio.gather(
             *(ws.send_text(msg) for ws_id, ws in self.wss.items() if ws_id != by)
         )
 
     async def change_status(self, new_status: VideoStatus, by: int):
-        logger.info(f"Changing status to {new_status}")
+        self.logger.info(f"Changing status to {new_status}")
         if self.status == new_status:
             return
         self._current_time = self.current_time
@@ -88,19 +87,19 @@ class RoomInfo:
             await self.send_to(Commands.set_time_cmd(self.current_time), to)
 
     async def handle_set_time(self, ts: float, by: int):
-        logger.info(f"Set current time from {self._current_time} to {ts}")
+        self.logger.info(f"Set current time from {self._current_time} to {ts}")
         self._current_time = ts
         self.last_change = time()
         self.video_source.cancel()
         await self.send_room(Commands.set_time_cmd(ts), by)
         await self.suspend_by_all(ts)
-    
+
     async def suspend_by_all(self, ts: float):
         for i in self.wss.keys():
             await self.handle_susp_unsusp(Commands.SUSPEND, ts, i)
 
     async def handle_cmd(self, data: str, ws_id: int):
-        logger.debug(f"Rc: {ws_id}, {data}")
+        self.logger.debug(f"Rc: {ws_id}, {data}")
         cmd, ts = data.split(" ")
         ts = float(ts)
         cmd = Commands(cmd)
@@ -114,10 +113,10 @@ class RoomInfo:
             await self.handle_set_time(ts, ws_id)
 
     async def handle_leave(self, ws_id: int):
-        if ws_id in self.suspend_by:
-            await self.handle_susp_unsusp(Commands.UNSUSPEND, time(), ws_id)
-        await self.handle_play_pause(Commands.PAUSE, ws_id)
         self.wss.pop(ws_id, None)
+        if ws_id in self.suspend_by:
+            await self.handle_susp_unsusp(Commands.UNSUSPEND, self.current_time, ws_id)
+        await self.handle_play_pause(Commands.PAUSE, -1)
         await self.send_room(Commands.people_count_cmd(len(self.wss)))
 
     async def handle_client(self, websocket: WebSocket):
@@ -125,7 +124,7 @@ class RoomInfo:
         self.last_ws_id += 1
         try:
             await self.initial(websocket, ws_id)
-            logger.info(f"Client {ws_id} connected")
+            self.logger.info(f"Client {ws_id} connected")
             while True:
                 try:
                     data = await wait_for(websocket.receive_text(), MOE)
@@ -133,12 +132,12 @@ class RoomInfo:
                 except TimeoutError:
                     if self.status != VideoStatus.PLAY:
                         continue
-                    logger.info(f"Timeout for {ws_id}")
+                    self.logger.info(f"Timeout for {ws_id}")
                     await self.change_status(VideoStatus.SUSPEND, ws_id)
         except WebSocketDisconnect:
-            logger.info(f"User {ws_id} disconnected")
+            self.logger.info(f"User {ws_id} disconnected")
         except Exception as exc:
-            logger.error("\n".join(format_exception(exc)))
+            self.logger.error("\n".join(format_exception(exc)))
         await self.handle_leave(ws_id)
 
     @property

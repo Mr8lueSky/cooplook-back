@@ -1,6 +1,5 @@
-import logging
 import os
-from asyncio import sleep
+from asyncio import get_event_loop, sleep
 from secrets import token_hex
 from time import sleep as sync_sleep
 from time import time
@@ -11,13 +10,11 @@ from starlette.requests import Request
 from starlette.responses import FileResponse
 from starlette.types import Send
 
-logger = logging.getLogger(__name__)
+from logger import Logging
 
 
-class PieceManager:
+class PieceManager(Logging):
     preload_pieces = 50
-    """torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
-                 file_index: int = -1"""
 
     def __init__(
         self,
@@ -32,29 +29,30 @@ class PieceManager:
         self.th: lt.torrent_handle = th
         self.ti = ti
         self.fi = file_index
-        self.last_piece = -1
         self.start, self.start_offset = self.bytes_to_piece_offset(0)
+        self.last_piece = self.start
         self.end, self.end_offset = self.bytes_to_piece_offset(self.file_size())
 
     def bytes_to_piece_offset(self, b: int):
         pr = self.ti.map_file(self.fi, b, 0)
         return pr.piece, pr.start
 
+    def on_download_start(self):
+        self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
+        self.th.prioritize_pieces(
+            (i, 4) for i in range(self.start, self.end + 1) if not self.th.have_piece(i)
+        )
+        self.th.set_piece_deadline(self.end, 0, 0)
+
     def file_size(self):
         return self.ti.files().file_size(self.fi)
 
     def initiate(self, b_start: int, b_end: int):
-        self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         p_start, _ = self.bytes_to_piece_offset(b_start)
-        p_end, _ = self.bytes_to_piece_offset(b_end)
-        self.th.prioritize_pieces(
-            (i, 4) for i in range(p_start, p_end + 1) if not self.th.have_piece(i)
-        )
         for p in range(p_start, p_start + self.preload_pieces):
-            self.th.set_piece_deadline(p, p - p_start, 0)
+            self.th.set_piece_deadline(p, p - self.last_piece, 0)
 
-    def cleanup(self):
-        print("Server disconected")
+    def cleanup(self): ...
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
@@ -62,6 +60,10 @@ class PieceManager:
         self.initiate(b_start, b_end)
         start, start_offset = self.bytes_to_piece_offset(b_start)
         end, end_offset = self.bytes_to_piece_offset(b_end)
+        if end_offset == 0:
+            end -= 1
+            end_offset = self.ti.piece_size(end)
+        self.logger.debug(f"For {b_start} to {b_end}, {end=}, {end_offset=}")
         for piece_id in range(start, end + 1):
             piece = await self.get_piece(piece_id)
             fr, to = 0, len(piece)
@@ -81,15 +83,16 @@ class PieceManager:
             self.piece_wait.pop(piece_id, None)
             self.piece_buffer.pop(piece_id, None)
 
-    async def get_piece(self, piece_id: int, timeout_s: int = 15):
-        self.th.set_piece_deadline(
-            piece_id + self.preload_pieces, piece_id - self.start, 0
-        )
+    async def get_piece(self, piece_id: int, timeout_s: int = 60):
         self.increment_queue(piece_id)
+        if piece_id not in self.piece_wait:
+            self.th.set_piece_deadline(
+                piece_id + self.preload_pieces, self.last_piece - piece_id, 0
+            )
         finish = time() + timeout_s
 
         while not self.th.have_piece(piece_id) and finish > time():
-            await sleep(0.005)
+            await sleep(0.01)
 
         if not self.th.have_piece(piece_id):
             self.decrement_queue(piece_id)
@@ -104,19 +107,19 @@ class PieceManager:
             alerts = self.ses.pop_alerts()
             for a in alerts:
                 if isinstance(a, lt.read_piece_alert) and self.piece_wait.get(a.piece):
-                    logger.debug(f"Got {a.piece}, curr: {piece_id}")
+                    self.logger.debug(f"Got {a.piece}, curr: {piece_id}")
                     self.piece_buffer[a.piece] = a.buffer
-            await sleep(0.005)
+            await sleep(0.01)
 
         if piece_id not in self.piece_buffer:
             self.decrement_queue(piece_id)
             raise AttributeError(f"{piece_id} not read in {timeout_s}")
         buffer = self.piece_buffer[piece_id]
-
+        self.decrement_queue(piece_id)
         return buffer
 
 
-class LoadingTorrentFileResponse(FileResponse):
+class LoadingTorrentFileResponse(FileResponse, Logging):
     chunk_size = 64 * 1024
 
     def __init__(self, *args, piece_manager: PieceManager | None = None, **kwargs):
@@ -135,7 +138,6 @@ class LoadingTorrentFileResponse(FileResponse):
 
         async for buffer in self.pm.iter_pieces(start, end):
             if (self.request and await self.request.is_disconnected()) or self.stop:
-                self.pm.cleanup()
                 return
             yield buffer, True
         yield b"", False
@@ -156,9 +158,9 @@ class LoadingTorrentFileResponse(FileResponse):
                     {"type": "http.response.body", "body": body, "more_body": more_body}
                 )
 
-    async def _handle_single_range(
+    async def __handle_single_range(
         self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
-    ) -> None:
+    ):
         self.headers["content-range"] = f"bytes {start}-{end - 1}/{file_size}"
         self.headers["content-length"] = str(end - start)
         await send(
@@ -171,6 +173,23 @@ class LoadingTorrentFileResponse(FileResponse):
                 await send(
                     {"type": "http.response.body", "body": body, "more_body": more_body}
                 )
+
+    async def _handle_single_range(
+        self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
+    ) -> None:
+        task = get_event_loop().create_task(
+            self.__handle_single_range(send, start, end, file_size, send_header_only)
+        )
+        while not task.done():
+            await sleep(1)
+            if self.stop or (self.request and await self.request.is_disconnected()):
+                if self.stop:
+                    self.logger.debug("Disconnect by server")
+                else:
+                    self.logger.debug("Disconnect by client")
+                task.cancel()
+                self.pm.cleanup()
+                break
 
     async def _handle_multiple_ranges(
         self,
