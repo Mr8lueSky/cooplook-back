@@ -28,7 +28,7 @@ else:
     TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
     VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
 
-torrent_vs = TorrentVideoSource("test.torrent", 1)
+torrent_vs = TorrentVideoSource("minecraft.torrent", 0)
 
 rooms = {
     TORRENT_ROOM_UUID: RoomInfo(
@@ -36,9 +36,7 @@ rooms = {
     ),
     VIDEO_ROOM_UUID: RoomInfo(
         room_id=VIDEO_ROOM_UUID,
-        video_source=FileVideoSource(
-            "/home/marblesky/Videos/lazarus.mp4"
-        ),
+        video_source=FileVideoSource("/home/marblesky/Videos/lazarus.mp4"),
         name="From file",
     ),
 }
@@ -126,6 +124,7 @@ async def syncing(websocket: WebSocket, room_id: UUID = Path()):
         await websocket.close(reason="room doesn't exist")
     room = rooms[room_id]
     await room.handle_client(websocket)
+
 
 @app.get("/")
 async def index():

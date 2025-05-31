@@ -15,8 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class PieceManager:
-    preload_pieces = 30
-    max_prior_from = 15
+    preload_pieces = 50
     """torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
                  file_index: int = -1"""
 
@@ -45,22 +44,17 @@ class PieceManager:
         return self.ti.files().file_size(self.fi)
 
     def initiate(self, b_start: int, b_end: int):
+        self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         p_start, _ = self.bytes_to_piece_offset(b_start)
         p_end, _ = self.bytes_to_piece_offset(b_end)
         self.th.prioritize_pieces(
-            (i, 4) for i in range(p_start, p_end) if not self.th.have_piece(i)
+            (i, 4) for i in range(p_start, p_end + 1) if not self.th.have_piece(i)
         )
         for p in range(p_start, p_start + self.preload_pieces):
             self.th.set_piece_deadline(p, p - p_start, 0)
 
     def cleanup(self):
         print("Server disconected")
-
-    def prioritize_pieces(self, prior: int, start: int, end: int):
-        self.th.prioritize_pieces((i, prior) for i in range(start, end))
-        logger.debug(
-            f"Prioritizing from {start} to {min(end + self.preload_pieces, end)} with {prior}"
-        )
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
@@ -88,12 +82,6 @@ class PieceManager:
             self.piece_buffer.pop(piece_id, None)
 
     async def get_piece(self, piece_id: int, timeout_s: int = 15):
-        if not self.th.have_piece(piece_id + self.preload_pieces):
-            self.th.piece_priority(piece_id + self.preload_pieces, 4)
-        if not self.th.have_piece(piece_id + self.max_prior_from):
-            self.th.piece_priority(piece_id + self.max_prior_from, 6)
-        if not self.th.have_piece(piece_id):
-            self.th.piece_priority(piece_id, 7)
         self.th.set_piece_deadline(
             piece_id + self.preload_pieces, piece_id - self.start, 0
         )

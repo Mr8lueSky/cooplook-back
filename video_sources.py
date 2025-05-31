@@ -52,9 +52,6 @@ class TorrentVideoSource(VideoSource):
     def start(self):
         self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
         self.ti.map_file(self.fi, 0, 0)
-        self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
-        for i in range(10):
-            self.th.piece_priority(self.ti.map_file(self.fi, 0, 0).piece + i, 7)
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
 
     def cancel(self):
