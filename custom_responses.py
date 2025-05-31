@@ -53,7 +53,14 @@ class PieceManager:
         for p in range(p_start, p_start + self.preload_pieces):
             self.th.set_piece_deadline(p, p - p_start, 0)
 
-    def cleanup(self): ...
+    def cleanup(self):
+        print("Server disconected")
+
+    def prioritize_pieces(self, prior: int, start: int, end: int):
+        self.th.prioritize_pieces((i, prior) for i in range(start, end))
+        logger.debug(
+            f"Prioritizing from {start} to {min(end + self.preload_pieces, end)} with {prior}"
+        )
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
@@ -77,8 +84,8 @@ class PieceManager:
     def decrement_queue(self, piece_id: int):
         self.piece_wait[piece_id] -= 1
         if not self.piece_wait[piece_id]:
-            self.piece_wait.pop(piece_id)
-            self.piece_buffer.pop(piece_id)
+            self.piece_wait.pop(piece_id, None)
+            self.piece_buffer.pop(piece_id, None)
 
     async def get_piece(self, piece_id: int, timeout_s: int = 15):
         if not self.th.have_piece(piece_id + self.preload_pieces):
@@ -131,6 +138,7 @@ class LoadingTorrentFileResponse(FileResponse):
         if piece_manager is None:
             raise AttributeError("piece manager is not given")
         self.pm = piece_manager
+        self.stop = False
         self.request: Request | None = None
 
     async def _download_range(self, start: int, end: int = -1):
@@ -138,7 +146,7 @@ class LoadingTorrentFileResponse(FileResponse):
             end = self.pm.file_size()
 
         async for buffer in self.pm.iter_pieces(start, end):
-            if self.request and await self.request.is_disconnected():
+            if (self.request and await self.request.is_disconnected()) or self.stop:
                 self.pm.cleanup()
                 return
             yield buffer, True

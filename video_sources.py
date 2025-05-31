@@ -13,6 +13,8 @@ class VideoSource(abc.ABC):
 
     def start(self): ...
 
+    def cancel(self): ...
+
     @abc.abstractmethod
     def get_video_response(self, request) -> Response: ...
 
@@ -45,6 +47,7 @@ class TorrentVideoSource(VideoSource):
         self.fi = file_index
         self.th = None
         self.pm: PieceManager | None = None
+        self.resps = []
 
     def start(self):
         self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
@@ -54,12 +57,16 @@ class TorrentVideoSource(VideoSource):
             self.th.piece_priority(self.ti.map_file(self.fi, 0, 0).piece + i, 7)
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
 
+    def cancel(self):
+        for r in self.resps:
+            r.stop = True
+        self.resps.clear()
+
     def get_video_response(self, request) -> Response:
-        # torrent_info: lt.torrent_info = None, torrent_handle: lt.torrent_handle,
-        # file_index: int = -1, piece_manager=None,
         files = self.ti.files()
         r = LoadingTorrentFileResponse(
             files.file_path(self.fi, self.SAVE_PATH), piece_manager=self.pm
         )
         r.request = request
+        self.resps.append(r)
         return r

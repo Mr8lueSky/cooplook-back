@@ -15,8 +15,6 @@ from video_sources import FileVideoSource, TorrentVideoSource
 app = FastAPI()
 app.mount("/static", StaticFiles(directory="static"))
 
-VIDEO_PATH = "low10.mp4"
-
 logger = logging.getLogger(__name__)
 logging.basicConfig(filename="example.log", encoding="utf-8", level=logging.DEBUG)
 
@@ -39,7 +37,7 @@ rooms = {
     VIDEO_ROOM_UUID: RoomInfo(
         room_id=VIDEO_ROOM_UUID,
         video_source=FileVideoSource(
-            "torrents/Kijin Gentoushou - AniLibria [WEBRip 1080p]/Kijin_Gentosho_[02]_[AniLibria]_[WEBRip_1080p].mkv"
+            "/home/marblesky/Videos/lazarus.mp4"
         ),
         name="From file",
     ),
@@ -72,6 +70,7 @@ let videoElem = document.getElementById("video")
 
 videoElem.addEventListener("canplay", (event) => {{console.log("canplay")}} )
 videoElem.addEventListener("waiting", (event) => {{console.log("waitingsolong")}} )
+videoElem.addEventListener("playing", (event) => {{console.log("playing")}} )
 </script>
 """
     )
