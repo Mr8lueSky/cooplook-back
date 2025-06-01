@@ -1,5 +1,6 @@
+import asyncio
 import os
-from asyncio import get_event_loop, sleep
+from asyncio import Task, sleep
 from secrets import token_hex
 from time import sleep as sync_sleep
 from time import time
@@ -37,18 +38,20 @@ class PieceManager(Logging):
         pr = self.ti.map_file(self.fi, b, 0)
         return pr.piece, pr.start
 
-    def on_download_start(self):
+    def initiate_torrent_download(self):
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         self.th.prioritize_pieces(
             (i, 4) for i in range(self.start, self.end + 1) if not self.th.have_piece(i)
         )
         self.th.set_piece_deadline(self.end, 0, 0)
+        self.initiate_request(0)
 
     def file_size(self):
         return self.ti.files().file_size(self.fi)
 
-    def initiate(self, b_start: int, b_end: int):
+    def initiate_request(self, b_start: int):
         p_start, _ = self.bytes_to_piece_offset(b_start)
+        self.logger.debug(f"Setting deadlines from {p_start=}")
         for p in range(p_start, p_start + self.preload_pieces):
             self.th.set_piece_deadline(p, p - self.last_piece, 0)
 
@@ -57,7 +60,7 @@ class PieceManager(Logging):
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
             b_end = self.file_size()
-        self.initiate(b_start, b_end)
+        self.initiate_request(b_start)
         start, start_offset = self.bytes_to_piece_offset(b_start)
         end, end_offset = self.bytes_to_piece_offset(b_end)
         if end_offset == 0:
@@ -84,11 +87,12 @@ class PieceManager(Logging):
             self.piece_buffer.pop(piece_id, None)
 
     async def get_piece(self, piece_id: int, timeout_s: int = 60):
-        self.increment_queue(piece_id)
         if piece_id not in self.piece_wait:
+            self.logger.debug(f"Setting deadline for {piece_id + self.preload_pieces}")
             self.th.set_piece_deadline(
                 piece_id + self.preload_pieces, self.last_piece - piece_id, 0
             )
+        self.increment_queue(piece_id)
         finish = time() + timeout_s
 
         while not self.th.have_piece(piece_id) and finish > time():
@@ -107,7 +111,7 @@ class PieceManager(Logging):
             alerts = self.ses.pop_alerts()
             for a in alerts:
                 if isinstance(a, lt.read_piece_alert) and self.piece_wait.get(a.piece):
-                    self.logger.debug(f"Got {a.piece}, curr: {piece_id}")
+                    self.logger.debug(f"Got {a.piece}")
                     self.piece_buffer[a.piece] = a.buffer
             await sleep(0.01)
 
@@ -122,23 +126,29 @@ class PieceManager(Logging):
 class LoadingTorrentFileResponse(FileResponse, Logging):
     chunk_size = 64 * 1024
 
-    def __init__(self, *args, piece_manager: PieceManager | None = None, **kwargs):
+    def __init__(self, *args, piece_manager: PieceManager | None = None, 
+                 request: Request | None = None, **kwargs):
         super().__init__(*args, **kwargs)
         while not os.path.isfile(self.path):
             sync_sleep(0.001)
         if piece_manager is None:
             raise AttributeError("piece manager is not given")
+        if request is None:
+            raise AttributeError("request must be provided")
         self.pm = piece_manager
         self.stop = False
-        self.request: Request | None = None
+        self.request = request
+        self.tasks: list[Task] = []
+
+    def cancel(self):
+        for task in self.tasks:
+            task.cancel()
 
     async def _download_range(self, start: int, end: int = -1):
         if end == -1:
             end = self.pm.file_size()
 
         async for buffer in self.pm.iter_pieces(start, end):
-            if (self.request and await self.request.is_disconnected()) or self.stop:
-                return
             yield buffer, True
         yield b"", False
 
@@ -158,9 +168,15 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                     {"type": "http.response.body", "body": body, "more_body": more_body}
                 )
 
-    async def __handle_single_range(
+    async def _download_single_range(self, send: Send, start: int, end: int):
+        async for body, more_body in self._download_range(start, end):
+            await send(
+                {"type": "http.response.body", "body": body, "more_body": more_body}
+            )
+
+    async def _handle_single_range(
         self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
-    ):
+    ) -> None:
         self.headers["content-range"] = f"bytes {start}-{end - 1}/{file_size}"
         self.headers["content-length"] = str(end - start)
         await send(
@@ -169,27 +185,13 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async for body, more_body in self._download_range(start, end):
-                await send(
-                    {"type": "http.response.body", "body": body, "more_body": more_body}
+            async with asyncio.TaskGroup() as tg:
+                self.tasks.append(
+                    tg.create_task(self._download_single_range(send, start, end))
                 )
-
-    async def _handle_single_range(
-        self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
-    ) -> None:
-        task = get_event_loop().create_task(
-            self.__handle_single_range(send, start, end, file_size, send_header_only)
-        )
-        while not task.done():
-            await sleep(1)
-            if self.stop or (self.request and await self.request.is_disconnected()):
-                if self.stop:
-                    self.logger.debug("Disconnect by server")
-                else:
-                    self.logger.debug("Disconnect by client")
-                task.cancel()
-                self.pm.cleanup()
-                break
+                while not await self.request.is_disconnected():
+                   await sleep(1)
+                self.cancel()
 
     async def _handle_multiple_ranges(
         self,

@@ -47,24 +47,25 @@ class TorrentVideoSource(VideoSource):
         self.fi = file_index
         self.th = None
         self.pm: PieceManager | None = None
-        self.resps = []
+        self.resps: list[LoadingTorrentFileResponse] = []
 
     def start(self):
         self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
         self.ti.map_file(self.fi, 0, 0)
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
-        self.pm.on_download_start()
+        self.pm.initiate_torrent_download()
 
     def cancel(self):
         for r in self.resps:
-            r.stop = True
+            r.cancel()
         self.resps.clear()
 
     def get_video_response(self, request) -> Response:
         files = self.ti.files()
         r = LoadingTorrentFileResponse(
-            files.file_path(self.fi, self.SAVE_PATH), piece_manager=self.pm
+            files.file_path(self.fi, self.SAVE_PATH),
+            piece_manager=self.pm,
+            request=request,
         )
-        r.request = request
         self.resps.append(r)
         return r
