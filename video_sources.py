@@ -1,15 +1,25 @@
+import os
+from pathlib import Path
+import config
 from custom_responses import PieceManager, LoadingTorrentFileResponse
 import abc
 import libtorrent as lt
-from pathlib import Path as FilePath
+from validators import torrent_type
 from uuid import UUID
 from fastapi import Response
 from fastapi.responses import FileResponse
 
 
 class VideoSource(abc.ABC):
-    def get_player_src(self, room_id: UUID) -> str:
-        return f"/files/{room_id}"
+    def __init__(self) -> None:
+        super().__init__()
+        self.room_id: UUID | None = None
+
+    def get_player_src(self) -> str:
+        return f"/files/{self.room_id}"
+
+    def set_room_id(self, room_id: UUID):
+        self.room_id = room_id
 
     def start(self): ...
 
@@ -39,19 +49,25 @@ class FileVideoSource(VideoSource):
 
 
 class TorrentVideoSource(VideoSource):
-    SAVE_PATH = "torrents"
+    SAVE_PATH: Path = config.TORRENT_SAVE_PATH
 
-    def __init__(self, torrent_path: FilePath | str, file_index: int):
-        self.ti = lt.torrent_info(torrent_path)
+    def __init__(self, torrent: torrent_type, file_index: int):
+        self.ti = lt.torrent_info(torrent)
         self.session = lt.session()
         self.fi = file_index
         self.th = None
         self.pm: PieceManager | None = None
         self.resps: list[LoadingTorrentFileResponse] = []
 
+    @property
+    def save_path(self):
+        if self.room_id is None:
+            raise AttributeError("Room id is not set!")
+        return str(self.SAVE_PATH / str(self.room_id))
+
     def start(self):
-        self.th = self.session.add_torrent({"ti": self.ti, "save_path": "torrents"})
-        self.ti.map_file(self.fi, 0, 0)
+        os.makedirs(self.save_path, exist_ok=True)
+        self.th = self.session.add_torrent({"ti": self.ti, "save_path": self.save_path})
         self.pm = PieceManager(self.session, self.th, self.ti, self.fi)
         self.pm.initiate_torrent_download()
 
@@ -63,7 +79,7 @@ class TorrentVideoSource(VideoSource):
     def get_video_response(self, request) -> Response:
         files = self.ti.files()
         r = LoadingTorrentFileResponse(
-            files.file_path(self.fi, self.SAVE_PATH),
+            files.file_path(self.fi, self.save_path),
             piece_manager=self.pm,
             request=request,
         )

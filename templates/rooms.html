@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Rooms</title>
+        <link href="/static/rooms.css" rel="stylesheet">
+</head>
+
+<body>
+        <h3>List of rooms:</h3>
+        <ul id="room-list">
+                {% for room in rooms %}
+                <li><a href="/rooms/{{ room.room_id }}">{{ room.name }}</a></li>
+                {% endfor %}
+        </ul>
+	<h3 id="alerts"></h3>
+        <div id="room-create">
+                <h3>Create room:</h3>
+		<select id="video-from">
+			<option id="link" value="from-link">From a link</option>
+			<option id="torrent" value="from-torrent">From torrent</option>
+		</select>
+		<input id="room-name" type="text" name="room-name" placeholder="Room name">
+		<div id="from-link">
+			<input id="link" name="link" placeholder="Link to a video">
+
+		</div>
+
+		<div id="from-torrent">
+
+
+			<input id="torrent-file" type="file" name="torrent-file" value="torrent-file">
+		</div>
+		<input id="create-room" type="submit" value="Submit">
+
+        </div>
+        <script src="/static/rooms.js">
+        </script>
+</body>
+
+</html>

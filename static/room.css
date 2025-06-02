@@ -1,0 +1,21 @@
+#video-wrapper {
+        position: relative
+}
+
+#video-wrapper video {
+        position: relative;
+        z-index: 100;
+}
+
+#alert {
+        color: red;
+}
+
+#video-wrapper p {
+        position: absolute;
+        display: block;
+        z-index: 150;
+        left: 10px;
+        top: 10px;
+        color: white;
+}
