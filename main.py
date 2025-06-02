@@ -31,12 +31,12 @@ torrent_vs = TorrentVideoSource("minecraft.torrent", 0)
 
 rooms = {
     TORRENT_ROOM_UUID: RoomInfo(
-        room_id=TORRENT_ROOM_UUID, video_source=torrent_vs, name="From torrent"
+        room_id=TORRENT_ROOM_UUID, video_source=torrent_vs, name="Room from torrent"
     ),
     VIDEO_ROOM_UUID: RoomInfo(
         room_id=VIDEO_ROOM_UUID,
         video_source=FileVideoSource("/home/marblesky/Videos/lazarus.mp4"),
-        name="From file",
+        name="Room from file",
     ),
 }
 
@@ -99,11 +99,9 @@ async def inside_room(room_id: UUID):
 
 @app.get("/rooms/")
 async def list_rooms():
-    rooms_html = []
-    for room_id, room_info in rooms.items():
-        rooms_html.append(f'<a href="/rooms/{room_id}">{room_info.name}</a>')
-    return HTMLResponse(f"""{"<br>".join(rooms_html)}""")
-
+   return HTMLResponse(
+           env.get_template("rooms.html").render(rooms=rooms.values())
+           )
 
 @app.get("/rooms/{room_id}/stats")
 async def get_stats(room_id: UUID):
