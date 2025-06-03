@@ -11,7 +11,7 @@ from fastapi.responses import FileResponse
 
 
 class VideoSource(abc.ABC):
-    def __init__(self) -> None:
+    def __init__(self, _: str, __: int) -> None:
         super().__init__()
         self.room_id: UUID | None = None
 
@@ -30,7 +30,7 @@ class VideoSource(abc.ABC):
 
 
 class HttpLinkVideoSource(VideoSource):
-    def __init__(self, link: str):
+    def __init__(self, link: str, _: int = 0):
         self.link = link
 
     def get_player_src(self, *_, **__) -> str:

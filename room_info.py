@@ -4,11 +4,12 @@ from asyncio import wait_for
 from dataclasses import dataclass, field
 from time import time
 from traceback import format_exception
-from uuid import UUID, uuid1
-from starlette.websockets import WebSocketDisconnect
-from fastapi import WebSocket
+from uuid import UUID
 
-from cmds import VideoStatus, Commands
+from fastapi import WebSocket
+from starlette.websockets import WebSocketDisconnect
+
+from cmds import Commands, VideoStatus
 from logger import Logging
 from video_sources import VideoSource
 
@@ -23,7 +24,7 @@ class RoomInfo(Logging):
             validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)
         )
     )
-    room_id: UUID = field(default_factory=uuid1)
+    room_id: UUID
     prev_status: None | VideoStatus = None
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0

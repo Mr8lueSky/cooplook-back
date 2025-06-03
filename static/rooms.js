@@ -11,7 +11,7 @@ let selectSourceElem = document.getElementById("video-from")
 let createRoomBt = document.getElementById("create-room")
 let roomNameElm = document.getElementById("room-name")
 let torrentFileElm = document.getElementById("torrent-file")
-let linkElm = document.getElementById("link")
+let linkElm = document.getElementById("video-link")
 let alertsElm = document.getElementById("alerts")
 
 let sourcesToElements = {
@@ -78,6 +78,10 @@ let onCreateRoomBtClick = async () => {
                 body: data,
         })
 	const respJson = await resp.json();
+	if (resp.status !== 200) {
+		showAlert(respJson["error"])
+		return;
+	}
 	document.location.pathname = `/rooms/${respJson['room_id']}`
 }
 
