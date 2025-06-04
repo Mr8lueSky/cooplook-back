@@ -5,16 +5,29 @@ from dataclasses import dataclass, field
 from time import time
 from traceback import format_exception
 from uuid import UUID
+from asyncio import Lock
 
 from fastapi import WebSocket
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import exc
 from starlette.websockets import WebSocketDisconnect
 
 from cmds import Commands, VideoStatus
+from engine import async_session_maker
 from logger import Logging
 from video_sources import VideoSource
 
 MOE = 1
+rooms = {}
+lock = Lock()
 
+async def get_room(session: AsyncSession, room_id: UUID):
+    async with lock:
+        if room_id not in rooms:
+            from models.room import RoomModel
+            rooms[room_id] = await RoomModel.get_room_id(session, room_id)
+            rooms[room_id].video_source.start()
+    return rooms[room_id]
 
 @dataclass
 class RoomInfo(Logging):
@@ -41,12 +54,16 @@ class RoomInfo(Logging):
         }
 
     async def send_to(self, msg: str, to: int):
-        await self.wss[to].send_text(msg)
+        try:
+            if to in self.wss:
+                await self.wss[to].send_text(msg)
+        except RuntimeError:
+            await self.handle_leave(to)
 
     async def send_room(self, msg: str, by: int = -1):
         self.logger.debug(f"Sn room {msg}, {by}")
         await asyncio.gather(
-            *(ws.send_text(msg) for ws_id, ws in self.wss.items() if ws_id != by)
+            *(self.send_to(msg, ws_id) for ws_id in self.wss.keys() if ws_id != by)
         )
 
     async def change_status(self, new_status: VideoStatus, by: int):
@@ -100,18 +117,23 @@ class RoomInfo(Logging):
             await self.handle_susp_unsusp(Commands.SUSPEND, ts, i)
 
     async def handle_cmd(self, data: str, ws_id: int):
+        from models.room import RoomModel
+
         self.logger.debug(f"Rc: {ws_id}, {data}")
         cmd, ts = data.split(" ")
         ts = float(ts)
         cmd = Commands(cmd)
         if cmd == Commands.PING:
             await self.handle_ping(ts, ws_id)
+            return
         elif cmd == Commands.PLAY or cmd == Commands.PAUSE:
             await self.handle_play_pause(cmd, ws_id)
         elif cmd == Commands.SUSPEND or cmd == Commands.UNSUSPEND:
             await self.handle_susp_unsusp(cmd, ts, ws_id)
         elif cmd == Commands.SET_CT:
             await self.handle_set_time(ts, ws_id)
+        async with async_session_maker.begin() as session:
+            await RoomModel.update(session, self)
 
     async def handle_leave(self, ws_id: int):
         self.wss.pop(ws_id, None)

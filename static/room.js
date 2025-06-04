@@ -32,22 +32,27 @@ let cmdToStatus = {
 	[SUSPEND]: "SUSPEND",
 };
 
-function setStatus(new_status) {
-	if (!(new_status in cmdToStatus)) {
-		console.log(`Status doesn't exist: ${new_status}`);
+function setStatus(newStatus) {
+	if (!(newStatus in cmdToStatus)) {
+		console.log(`Status doesn't exist: ${newStatus}`);
 		return;
 	}
-        if (new_status === currentStatus) return;
-	if (new_status === PLAY || new_status === PAUSE) {
-		if (currentStatus === SUSPEND) return;
+	if (newStatus === UNSUSPEND) {
+		console.log("Unsuspending");
+		currentStatus = "";
+		return;
 	}
-	console.log(`Changing status from ${currentStatus} to ${new_status}`) 
+        if (newStatus === currentStatus) return;
+	if (newStatus === PLAY || newStatus === PAUSE) {
+		if (suspend) return;
+	}
+	console.log(`Changing status from ${currentStatus} to ${newStatus}`) 
 
-	if (new_status === SUSPEND) alertElem.textContent = "Waiting to load...";
+	if (newStatus === SUSPEND) alertElem.textContent = "Waiting to load...";
 	else alertElem.textContent = "";
 
-	currentStatusElem.textContent = cmdToStatus[new_status];
-	currentStatus = new_status;
+	currentStatusElem.textContent = cmdToStatus[newStatus];
+	currentStatus = newStatus;
 }
 
 setStatus(SUSPEND);

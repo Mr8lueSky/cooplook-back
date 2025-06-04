@@ -31,7 +31,7 @@ let showAlert = (msg) => {
 }
 
 let clearAlert = () => {
-	alertsElm.textContent = ""
+        alertsElm.textContent = ""
 }
 
 let validateRoomName = (roomName) => {
@@ -50,7 +50,7 @@ let selectSource = () => {
 }
 
 let onCreateRoomBtClick = async () => {
-	clearAlert();
+        clearAlert();
         let roomName = roomNameElm.value;
         if (!validateRoomName(roomName)) {
                 showAlert("Length of a name should be between 4 and 32. Also don't use any special characters!");
@@ -73,16 +73,19 @@ let onCreateRoomBtClick = async () => {
                 }
                 data.append("torrent_file", torrentFileElm.files[0])
         }
-        const resp = await fetch(url, {
-                method: "POST",
-                body: data,
-        })
-	const respJson = await resp.json();
-	if (resp.status !== 200) {
-		showAlert(respJson["error"])
-		return;
-	}
-	document.location.pathname = `/rooms/${respJson['room_id']}`
+        try {
+                const resp = await fetch(url, {
+                        method: "POST",
+                        body: data,
+                })
+                const respJson = await resp.json();
+
+                document.location.pathname = `/rooms/${respJson['room_id']}`
+
+        } catch (exc) {
+                showAlert(exc);
+                return
+        }
 }
 
 selectSource()

@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse
 
 
 class VideoSource(abc.ABC):
+    fi = 0
     def __init__(self, _: str, __: int) -> None:
         super().__init__()
         self.room_id: UUID | None = None

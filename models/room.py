@@ -2,7 +2,7 @@ from enum import Enum
 from uuid import UUID, uuid1
 
 from fastapi import HTTPException
-from sqlalchemy import String, Uuid, select
+from sqlalchemy import String, Uuid, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
@@ -29,9 +29,11 @@ source_to_enum = {
 
 def model_to_info(model) -> RoomInfo:
     vs_cls = enum_to_source[model.video_source]
-    return RoomInfo(
-        vs_cls(model.video_source_data, model.last_file_ind), model.name, model.room_id
+    r = RoomInfo(
+        vs_cls(model.video_source_data, model.last_file_ind), model.name, model.room_id, _current_time=model.last_watch_ts
     )
+    r.video_source.set_room_id(r.room_id)
+    return r
 
 
 class RoomModel(MappedAsDataclass, Base):
@@ -68,12 +70,26 @@ class RoomModel(MappedAsDataclass, Base):
 
     @classmethod
     async def exists_with_name(cls, session: AsyncSession, name: str) -> bool:
-        ans = False
-        try:
-            await cls.get_name(session, name)
-        except HTTPException as exc:
-            ans = exc.status_code == 404
-        return ans
+        stmt = exists(RoomModel).where(RoomModel.name == name)
+        result = await session.scalar(select(stmt))
+        return bool(result)
+
+    @classmethod
+    async def update(cls, session: AsyncSession, room_info: RoomInfo):
+        vs_cls = type(room_info.video_source)
+        if vs_cls not in source_to_enum:
+            raise HTTPException(404, {"error": f"Video source not found: {vs_cls}"})
+        stmt = (
+            update(RoomModel)
+            .where(RoomModel.room_id == room_info.room_id)
+            .values(
+                name=room_info.name,
+                video_source=source_to_enum[vs_cls],
+                last_watch_ts=room_info.current_time,
+                last_file_ind=room_info.video_source.fi,
+            )
+        )
+        await session.execute(stmt)
 
     @classmethod
     async def create(
@@ -81,7 +97,7 @@ class RoomModel(MappedAsDataclass, Base):
     ) -> RoomInfo:
         if vs_cls not in source_to_enum:
             raise HTTPException(404, {"error": f"Video source not found: {vs_cls}"})
-        if not await cls.exists_with_name(session, name):
+        if await cls.exists_with_name(session, name):
             raise HTTPException(422, {"error": "Room with same name already exists!"})
         rm = RoomModel(
             name=name, video_source=source_to_enum[vs_cls], video_source_data=vs_data

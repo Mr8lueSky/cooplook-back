@@ -12,13 +12,14 @@ from starlette.responses import (HTMLResponse, JSONResponse,
                                  RedirectResponse)
 
 from cmds import *
-from config import TORRENT_FILES_SAVE_PATH
+from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import create_all, get_session
 from models.room import RoomModel
+from room_info import get_room
 from validators import is_valid_torrent
 from video_sources import (HttpLinkVideoSource,
                            TorrentVideoSource)
-
+from engine import async_session_maker
 
 app = FastAPI()
 app.add_event_handler("startup", create_all)
@@ -36,64 +37,50 @@ env = Environment(
 ROOM_TEMPLATE = env.get_template("room.html")
 
 
-# if ENV == "DEV":
-#     random = False
-#
-#     if random:
-#         TORRENT_ROOM_UUID = uuid1()
-#         VIDEO_ROOM_UUID = uuid1()
-#     else:
-#         TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
-#         VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
-#
-#     torrent_vs = TorrentVideoSource("minecraft.torrent", 0)
-#     rooms[TORRENT_ROOM_UUID] = RoomInfo(
-#         room_id=TORRENT_ROOM_UUID, video_source=torrent_vs, name="Room from torrent"
-#     )
-#     rooms[VIDEO_ROOM_UUID] = RoomInfo(
-#         room_id=VIDEO_ROOM_UUID,
-#         video_source=FileVideoSource("/home/marblesky/Videos/lazarus.mp4"),
-#         name="Room from file",
-#     )
-#     torrent_vs.set_room_id(TORRENT_ROOM_UUID)
-#     torrent_vs.start()
-#
-#     @app.get("/priorities/{room_id}")
-#     async def get_priorities(room_id: UUID):
-#         if torrent_vs.pm is None:
-#             return ""
-#         return [
-#             (i, a)
-#             for i, a in enumerate(
-#                 rooms[room_id].video_source.pm.th.get_piece_priorities()
-#             )
-#         ]
-#
-#     @app.get("/have/{piece_id}/{room_id}")
-#     async def have_piece(piece_id: int, room_id: UUID):
-#         vs = rooms[room_id].video_source
-#         if not vs.pm:
-#             return ""
-#         return vs.pm.th.have_piece(piece_id)
-#
-#     @app.get("/from_torrent")
-#     def from_torrent():
-#         return HTMLResponse(
-#             f"""<video controls preload=none id=video width="640" height="480">
-#         <source src="/files/{TORRENT_ROOM_UUID}" type="video/mp4">
-#         Your browser does not support the video tag.
-#     </video>
-#     <script>
-#     let videoElem = document.getElementById("video")
-#
-#     videoElem.addEventListener("canplay", (event) => {{console.log("canplay")}} )
-#     videoElem.addEventListener("waiting", (event) => {{console.log("waitingsolong")}} )
-#     videoElem.addEventListener("playing", (event) => {{console.log("playing")}} )
-#     </script>
-#     """
-#         )
-#
-#
+if ENV == "DEV":
+    random = False
+
+    if random:
+        TORRENT_ROOM_UUID = uuid1()
+        VIDEO_ROOM_UUID = uuid1()
+    else:
+        TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
+        VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
+
+    @app.get("/priorities/{room_id}")
+    async def get_priorities(room_id: UUID, session = Depends(get_session)):
+        return [
+            (i, a)
+            for i, a in enumerate(
+                (await get_room(session, room_id)).video_source.pm.th.get_piece_priorities()
+            )
+        ]
+
+    @app.get("/have/{piece_id}/{room_id}")
+    async def have_piece(piece_id: int, room_id: UUID, session = Depends(get_session)):
+        vs = (await get_room(session, room_id)).video_source
+        if not vs.pm:
+            return ""
+        return vs.pm.th.have_piece(piece_id)
+
+    @app.get("/from_torrent")
+    def from_torrent():
+        return HTMLResponse(
+            f"""<video controls preload=none id=video width="640" height="480">
+        <source src="/files/{TORRENT_ROOM_UUID}" type="video/mp4">
+        Your browser does not support the video tag.
+    </video>
+    <script>
+    let videoElem = document.getElementById("video")
+
+    videoElem.addEventListener("canplay", (event) => {{console.log("canplay")}} )
+    videoElem.addEventListener("waiting", (event) => {{console.log("waitingsolong")}} )
+    videoElem.addEventListener("playing", (event) => {{console.log("playing")}} )
+    </script>
+    """
+        )
+
+
 class CreateRoomFromLinkModel(BaseModel):
     link: str
     name: str
@@ -133,14 +120,15 @@ async def create_room_torrent(
 
 
 @app.get("/files/{room_id}")
-async def get_video_file(room_id: UUID, request: Request, session = Depends(get_session)):
-    room = await RoomModel.get_room_id(session, room_id)
+async def get_video_file(room_id: UUID, request: Request):
+    async with async_session_maker.begin() as session:
+        room = await get_room(session, room_id)
     return room.video_source.get_video_response(request)
 
 
 @app.get("/rooms/{room_id}")
 async def inside_room(room_id: UUID, session=Depends(get_session)):
-    room = await RoomModel.get_room_id(session, room_id)
+    room = await get_room(session, room_id)
     return HTMLResponse(env.get_template("room.html").render(**room.for_temp()))
 
 
@@ -151,7 +139,7 @@ async def list_rooms(session = Depends(get_session)):
 
 @app.get("/rooms/{room_id}/stats")
 async def get_stats(room_id: UUID, session = Depends(get_session)):
-    room = await RoomModel.get_room_id(session, room_id)
+    room = await get_room(session, room_id)
     return JSONResponse(json.dumps(room, default=lambda o: str(o)))
 
 
@@ -162,7 +150,7 @@ async def set_to_play(link: str = Form(), room_id: UUID = Path()):
 
 @app.websocket("/rooms/{room_id}/ws")
 async def syncing(websocket: WebSocket, room_id: UUID = Path(), session = Depends(get_session)):
-    room = await RoomModel.get_room_id(session, room_id)
+    room = await get_room(session, room_id)
     await room.handle_client(websocket)
 
 
