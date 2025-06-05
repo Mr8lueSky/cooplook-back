@@ -63,7 +63,7 @@ let onCreateRoomBtClick = async () => {
         data.append("name", roomName)
         if (videoSource === FROM_LINK) {
                 if (linkElm.value.length < 4) {
-                        showAlert("Link is shorted than 4, is it expected?")
+                        showAlert("Link must be at least 4 characters long")
                         return;
                 }
                 data.append("link", linkElm.value)
@@ -78,8 +78,12 @@ let onCreateRoomBtClick = async () => {
                         method: "POST",
                         body: data,
                 })
-                const respJson = await resp.json();
 
+                const respJson = await resp.json();
+                if (!resp.ok) {
+                        showAlert(JSON.stringify(respJson))
+                        return;
+                }
                 document.location.pathname = `/rooms/${respJson['room_id']}`
 
         } catch (exc) {

@@ -87,7 +87,8 @@ class PieceManager(Logging):
             self.piece_buffer.pop(piece_id, None)
 
     async def get_piece(self, piece_id: int, timeout_s: int = 60):
-        if piece_id not in self.piece_wait:
+        next_p = piece_id + self.preload_pieces
+        if piece_id not in self.piece_wait and next_p <= self.end:
             self.logger.debug(f"Setting deadline for {piece_id + self.preload_pieces}")
             self.th.set_piece_deadline(
                 piece_id + self.preload_pieces, self.last_piece - piece_id, 0
@@ -126,8 +127,13 @@ class PieceManager(Logging):
 class LoadingTorrentFileResponse(FileResponse, Logging):
     chunk_size = 64 * 1024
 
-    def __init__(self, *args, piece_manager: PieceManager | None = None, 
-                 request: Request | None = None, **kwargs):
+    def __init__(
+        self,
+        *args,
+        piece_manager: PieceManager | None = None,
+        request: Request | None = None,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
         while not os.path.isfile(self.path):
             sync_sleep(0.001)
@@ -190,7 +196,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                     tg.create_task(self._download_single_range(send, start, end))
                 )
                 while not await self.request.is_disconnected():
-                   await sleep(1)
+                    await sleep(1)
                 self.cancel()
 
     async def _handle_multiple_ranges(

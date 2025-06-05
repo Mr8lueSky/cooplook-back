@@ -1,33 +1,35 @@
 import asyncio
 import re
-from asyncio import wait_for
+from asyncio import Lock, wait_for
 from dataclasses import dataclass, field
 from time import time
 from traceback import format_exception
 from uuid import UUID
-from asyncio import Lock
 
 from fastapi import WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import exc
 from starlette.websockets import WebSocketDisconnect
 
 from cmds import Commands, VideoStatus
 from engine import async_session_maker
 from logger import Logging
+from models.room_model import RoomModel, enum_to_source
 from video_sources import VideoSource
 
 MOE = 1
 rooms = {}
 lock = Lock()
 
+
 async def get_room(session: AsyncSession, room_id: UUID):
     async with lock:
         if room_id not in rooms:
-            from models.room import RoomModel
-            rooms[room_id] = await RoomModel.get_room_id(session, room_id)
-            rooms[room_id].video_source.start()
+            from models.room_model import RoomModel
+
+            room_model = await RoomModel.get_room_id(session, room_id)
+            rooms[room_id] = RoomInfo.from_model(room_model)
     return rooms[room_id]
+
 
 @dataclass
 class RoomInfo(Logging):
@@ -52,6 +54,19 @@ class RoomInfo(Logging):
             "video": self.video_source.get_player_src(),
             "room_name": self.name,
         }
+
+    @classmethod
+    def from_model(cls, model: RoomModel) -> "RoomInfo":
+        vs_cls = enum_to_source[model.video_source]
+        r = RoomInfo(
+            vs_cls(model.video_source_data, model.last_file_ind),
+            model.name,
+            model.room_id,
+            _current_time=model.last_watch_ts,
+        )
+        r.video_source.set_room_id(r.room_id)
+        r.video_source.start()
+        return r
 
     async def send_to(self, msg: str, to: int):
         try:
@@ -117,8 +132,6 @@ class RoomInfo(Logging):
             await self.handle_susp_unsusp(Commands.SUSPEND, ts, i)
 
     async def handle_cmd(self, data: str, ws_id: int):
-        from models.room import RoomModel
-
         self.logger.debug(f"Rc: {ws_id}, {data}")
         cmd, ts = data.split(" ")
         ts = float(ts)
@@ -133,7 +146,9 @@ class RoomInfo(Logging):
         elif cmd == Commands.SET_CT:
             await self.handle_set_time(ts, ws_id)
         async with async_session_maker.begin() as session:
-            await RoomModel.update(session, self)
+            await RoomModel.update(
+                session, self.room_id, self.current_time, self.video_source.fi
+            )
 
     async def handle_leave(self, ws_id: int):
         self.wss.pop(ws_id, None)

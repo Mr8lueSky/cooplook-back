@@ -1,17 +1,19 @@
+import abc
 import os
 from pathlib import Path
-import config
-from custom_responses import PieceManager, LoadingTorrentFileResponse
-import abc
-import libtorrent as lt
-from validators import torrent_type
 from uuid import UUID
+
+import libtorrent as lt
 from fastapi import Response
 from fastapi.responses import FileResponse
+
+import config
+from custom_responses import LoadingTorrentFileResponse, PieceManager
 
 
 class VideoSource(abc.ABC):
     fi = 0
+
     def __init__(self, _: str, __: int) -> None:
         super().__init__()
         self.room_id: UUID | None = None
@@ -52,7 +54,7 @@ class FileVideoSource(VideoSource):
 class TorrentVideoSource(VideoSource):
     SAVE_PATH: Path = config.TORRENT_SAVE_PATH
 
-    def __init__(self, torrent: torrent_type, file_index: int):
+    def __init__(self, torrent: bytes | str | Path, file_index: int):
         self.ti = lt.torrent_info(torrent)
         self.session = lt.session()
         self.fi = file_index

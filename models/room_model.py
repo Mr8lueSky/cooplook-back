@@ -1,4 +1,5 @@
 from enum import Enum
+from typing import Optional
 from uuid import UUID, uuid1
 
 from fastapi import HTTPException
@@ -6,8 +7,7 @@ from sqlalchemy import String, Uuid, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
-from models.base import Base
-from room_info import RoomInfo
+from models.base import BaseModel
 from video_sources import HttpLinkVideoSource, TorrentVideoSource, VideoSource
 
 
@@ -27,16 +27,7 @@ source_to_enum = {
 }
 
 
-def model_to_info(model) -> RoomInfo:
-    vs_cls = enum_to_source[model.video_source]
-    r = RoomInfo(
-        vs_cls(model.video_source_data, model.last_file_ind), model.name, model.room_id, _current_time=model.last_watch_ts
-    )
-    r.video_source.set_room_id(r.room_id)
-    return r
-
-
-class RoomModel(MappedAsDataclass, Base):
+class RoomModel(MappedAsDataclass, BaseModel):
     __tablename__ = "rooms"
 
     name: Mapped[str] = mapped_column(String(32))
@@ -47,26 +38,26 @@ class RoomModel(MappedAsDataclass, Base):
     last_watch_ts: Mapped[float] = mapped_column(default=0)
 
     @classmethod
-    async def get_all(cls, session: AsyncSession) -> list[RoomInfo]:
+    async def get_all(cls, session: AsyncSession) -> list["RoomModel"]:
         stmt = select(RoomModel)
         result = await session.execute(stmt)
-        return [model_to_info(m[0]) for m in result.all()]
+        return [m[0] for m in result.all()]
 
     @classmethod
-    async def get_room_id(cls, session: AsyncSession, room_id: UUID) -> RoomInfo:
+    async def get_room_id(cls, session: AsyncSession, room_id: UUID) -> "RoomModel":
         stmt = select(RoomModel).where(RoomModel.room_id == room_id)
         result = (await session.execute(stmt)).first()
         if not result:
             raise HTTPException(404, {"error": "Room not found!"})
-        return model_to_info(result[0])
+        return result[0]
 
     @classmethod
-    async def get_name(cls, session: AsyncSession, name: str) -> RoomInfo:
+    async def get_name(cls, session: AsyncSession, name: str) -> "RoomModel":
         stmt = select(RoomModel).where(RoomModel.name == name)
         result = (await session.execute(stmt)).first()
         if not result:
             raise HTTPException(404, {"error": "Room not found!"})
-        return model_to_info(result)
+        return result[0]
 
     @classmethod
     async def exists_with_name(cls, session: AsyncSession, name: str) -> bool:
@@ -75,26 +66,29 @@ class RoomModel(MappedAsDataclass, Base):
         return bool(result)
 
     @classmethod
-    async def update(cls, session: AsyncSession, room_info: RoomInfo):
-        vs_cls = type(room_info.video_source)
-        if vs_cls not in source_to_enum:
-            raise HTTPException(404, {"error": f"Video source not found: {vs_cls}"})
+    async def update(
+        cls,
+        session: AsyncSession,
+        room_id: UUID,
+        last_watch_ts: Optional[float] = None,
+        last_file_ind: Optional[int] = None,
+    ):
+        values = {}
+        if last_watch_ts is not None:
+            values['last_watch_ts'] = last_watch_ts
+        if last_file_ind is not None:
+            values['last_file_ind'] = last_file_ind
         stmt = (
             update(RoomModel)
-            .where(RoomModel.room_id == room_info.room_id)
-            .values(
-                name=room_info.name,
-                video_source=source_to_enum[vs_cls],
-                last_watch_ts=room_info.current_time,
-                last_file_ind=room_info.video_source.fi,
-            )
+            .where(RoomModel.room_id == room_id)
+            .values(**values)
         )
         await session.execute(stmt)
 
     @classmethod
     async def create(
         cls, session: AsyncSession, name: str, vs_cls: type[VideoSource], vs_data: str
-    ) -> RoomInfo:
+    ) -> "RoomModel":
         if vs_cls not in source_to_enum:
             raise HTTPException(404, {"error": f"Video source not found: {vs_cls}"})
         if await cls.exists_with_name(session, name):
@@ -104,4 +98,4 @@ class RoomModel(MappedAsDataclass, Base):
         )
         session.add(rm)
         await session.flush()
-        return model_to_info(rm)
+        return rm
