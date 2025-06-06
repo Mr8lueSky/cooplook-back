@@ -6,6 +6,7 @@ const PEOPLE_COUNT = "pc"
 const SUSPEND = "sp"
 const UNSUSPEND = "up"
 const FORCE_UNSUSPEND = "fu"
+const RELOAD = "rl"
 
 let suspend = false;
 let initial = true;
@@ -27,32 +28,32 @@ let alertElem = document.getElementById("alert");
 let currentStatus = "";
 
 let cmdToStatus = {
-	[PLAY]: "PLAY",
-	[PAUSE]: "PAUSE",
-	[SUSPEND]: "SUSPEND",
+        [PLAY]: "PLAY",
+        [PAUSE]: "PAUSE",
+        [SUSPEND]: "SUSPEND",
 };
 
 function setStatus(newStatus) {
-	if (!(newStatus in cmdToStatus)) {
-		console.log(`Status doesn't exist: ${newStatus}`);
-		return;
-	}
-	if (newStatus === UNSUSPEND) {
-		console.log("Unsuspending");
-		currentStatus = "";
-		return;
-	}
+        if (!(newStatus in cmdToStatus)) {
+                console.log(`Status doesn't exist: ${newStatus}`);
+                return;
+        }
+        if (newStatus === UNSUSPEND) {
+                console.log("Unsuspending");
+                currentStatus = "";
+                return;
+        }
         if (newStatus === currentStatus) return;
-	if (newStatus === PLAY || newStatus === PAUSE) {
-		if (suspend) return;
-	}
-	console.log(`Changing status from ${currentStatus} to ${newStatus}`) 
+        if (newStatus === PLAY || newStatus === PAUSE) {
+                if (suspend) return;
+        }
+        console.log(`Changing status from ${currentStatus} to ${newStatus}`)
 
-	if (newStatus === SUSPEND) alertElem.textContent = "Waiting to load...";
-	else alertElem.textContent = "";
+        if (newStatus === SUSPEND) alertElem.textContent = "Waiting to load...";
+        else alertElem.textContent = "";
 
-	currentStatusElem.textContent = cmdToStatus[newStatus];
-	currentStatus = newStatus;
+        currentStatusElem.textContent = cmdToStatus[newStatus];
+        currentStatus = newStatus;
 }
 
 setStatus(SUSPEND);
@@ -131,7 +132,10 @@ async function wsOnMessage(message) {
         } else if (cmd == PEOPLE_COUNT) {
                 peopleCountElem.textContent = ts;
                 return;
-        }
+        } else if (cmd == RELOAD) {
+		window.location.reload();
+		return;
+	}
 
         videoElem.currentTime = ts;
 }

@@ -10,13 +10,13 @@ from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from cmds import *
 from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, get_session
 from models.room_model import RoomModel
 from room_info import get_room
 from schemas.room_schemas import (CreateRoomLinkSchema,
-                                  CreateRoomTorrentSchema, GetRoomSchema)
+                                  CreateRoomTorrentSchema, GetRoomSchema,
+                                  GetRoomWatchingSchema)
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
@@ -50,21 +50,23 @@ if ENV == "DEV":
 
     @app.get("/priorities/{room_id}")
     async def get_priorities(room_id: UUID, session=Depends(get_session)):
+        r = await get_room(session, room_id)
+        if not isinstance(r.video_source, TorrentVideoSource):
+            return JSONResponse({"error": "Is not torrent"}, 422)
+        if r.video_source.tm.th is None:
+            return JSONResponse({"error": "In not initialized!"}, 422)
         return [
-            (i, a)
-            for i, a in enumerate(
-                (
-                    await get_room(session, room_id)
-                ).video_source.pm.th.get_piece_priorities()
-            )
+            (i, a) for i, a in enumerate(r.video_source.tm.th.get_piece_priorities())
         ]
 
     @app.get("/have/{piece_id}/{room_id}")
     async def have_piece(piece_id: int, room_id: UUID, session=Depends(get_session)):
         vs = (await get_room(session, room_id)).video_source
-        if not vs.pm:
+        if not isinstance(vs, TorrentVideoSource):
+            return JSONResponse({"error": "not a torrent"}, 422)
+        if not vs.tm or not vs.tm.th:
             return ""
-        return vs.pm.th.have_piece(piece_id)
+        return vs.tm.th.have_piece(piece_id)
 
     @app.get("/from_torrent")
     def from_torrent():
@@ -117,8 +119,19 @@ async def get_video_file(room_id: UUID, request: Request) -> FileResponse:
 async def inside_room(room_id: UUID, session=Depends(get_session)) -> HTMLResponse:
     room = await get_room(session, room_id)
     return HTMLResponse(
-        env.get_template("room.html").render(GetRoomSchema.from_room_info(room))
+        env.get_template("room.html").render(
+            room=GetRoomWatchingSchema.from_room_info(room)
+        )
     )
+
+
+@app.get("/rooms/{room_id}/{fi}")
+async def set_curr_file(
+    room_id: UUID = Path(), fi: int = Path(), session=Depends(get_session)
+):
+    room = await get_room(session, room_id)
+    await room.set_new_file(fi)
+    return RedirectResponse(f"/rooms/{room_id}", status_code=303)
 
 
 @app.get("/rooms/")

@@ -84,3 +84,18 @@ class GetRoomSchema(BaseSchema):
     @classmethod
     def from_room_model(cls, room_model: RoomModel):
         return cls(room_id=room_model.room_id, name=room_model.name, video=None)
+
+
+class GetRoomWatchingSchema(GetRoomSchema):
+    files: list[tuple[int, str]]
+    curr_fi: int
+
+    @classmethod
+    def from_room_info(cls, room_info: RoomInfo):
+        return cls(
+            room_id=room_info.room_id,
+            name=room_info.name,
+            video=room_info.video_source.get_player_src(),
+            files=room_info.get_available_files(),
+            curr_fi=room_info.video_source.fi
+        )

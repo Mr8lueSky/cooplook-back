@@ -4,11 +4,10 @@ from asyncio import sleep
 from pathlib import Path
 from uuid import UUID
 
-from fastapi import Response
 from fastapi.responses import FileResponse
 
 import config
-from custom_responses import LoadingTorrentFileResponse, PieceManager
+from custom_responses import LoadingTorrentFileResponse, TorrentManager
 
 
 class VideoSource(abc.ABC):
@@ -20,12 +19,19 @@ class VideoSource(abc.ABC):
     def get_player_src(self) -> str:
         return f"/files/{self.room_id}"
 
-    def start(self): ...
-
-    def cancel(self): ...
+    @abc.abstractmethod
+    def get_available_files(self) -> list[tuple[int, str]]: ...
 
     @abc.abstractmethod
-    async def get_video_response(self, request) -> Response: ...
+    def set_current_fi(self, fi: int) -> bool: ...
+
+    def start(self): ...
+
+    @abc.abstractmethod
+    def cancel_current_requests(self): ...
+
+    @abc.abstractmethod
+    async def get_video_response(self, request) -> FileResponse: ...
 
 
 class HttpLinkVideoSource(VideoSource):
@@ -36,16 +42,16 @@ class HttpLinkVideoSource(VideoSource):
     def get_player_src(self, *_, **__) -> str:
         return self.link
 
+    def get_available_files(self) -> list[tuple[int, str]]:
+        return [(0, self.link)]
+
+    def set_current_fi(self, fi: int) -> bool:
+        return False
+
+    def cancel_current_requests(self): ...
+
     def get_video_response(self, request):
         raise AttributeError("Don't need to be implemented")
-
-
-class FileVideoSource(VideoSource):
-    def __init__(self, file_path: str):
-        self.file_path = file_path
-
-    async def get_video_response(self, request) -> Response:
-        return FileResponse(self.file_path)
 
 
 class TorrentVideoSource(VideoSource):
@@ -54,7 +60,7 @@ class TorrentVideoSource(VideoSource):
     def __init__(self, torrent: bytes | str, file_index: int, room_id: UUID):
         super().__init__("", file_index, room_id)
         self.torrent = torrent
-        self.pm = PieceManager(self.torrent, self.fi, self.save_path)
+        self.tm = TorrentManager(self.torrent, self.fi, self.save_path)
         self.resps: list[LoadingTorrentFileResponse] = []
 
     @property
@@ -63,22 +69,34 @@ class TorrentVideoSource(VideoSource):
             raise AttributeError("Room id is not set!")
         return str(self.SAVE_PATH / str(self.room_id))
 
+    def set_current_fi(self, fi: int) -> bool:
+        """Returns is file changed or not"""
+        if fi == self.fi:
+            return False
+        self.tm.set_new_fi(fi)
+        self.fi = fi
+        self.tm.initiate_torrent_download()
+        return True
+
     def start(self):
         os.makedirs(self.save_path, exist_ok=True)
-        self.pm.initiate_torrent_download()
+        self.tm.initiate_torrent_download()
 
-    def cancel(self):
+    def cancel_current_requests(self):
         for r in self.resps:
             r.cancel()
         self.resps.clear()
 
+    def get_available_files(self) -> list[tuple[int, str]]:
+        return self.tm.get_all_filenames()
+
     async def get_video_response(self, request) -> LoadingTorrentFileResponse:
-        file_path = self.pm.get_current_filepath()
+        file_path = self.tm.get_current_filepath()
         while not os.path.isfile(file_path):
             await sleep(0.01)
         r = LoadingTorrentFileResponse(
             file_path,
-            piece_manager=self.pm,
+            piece_manager=self.tm,
             request=request,
         )
         self.resps.append(r)

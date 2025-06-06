@@ -12,7 +12,7 @@ from starlette.types import Send
 from logger import Logging
 
 
-class PieceManager(Logging):
+class TorrentManager(Logging):
     preload_pieces: int = 50
 
     def __init__(self, torrent: bytes | str, file_index: int, save_path: str):
@@ -30,18 +30,33 @@ class PieceManager(Logging):
         )
         self.save_path = save_path
 
+    def set_new_fi(self, new_fi: int):
+        self.fi = new_fi
+        self.file_start, self.file_start_offset = self.bytes_to_piece_offset(0)
+        self.last_used_piece = self.file_start
+        self.file_end, self.file_end_offset = self.bytes_to_piece_offset(
+            self.file_size()
+        )
+
     def get_curent_filename(self) -> str:
         return self.files.file_name(self.fi)
 
     def get_current_filepath(self) -> str:
         return self.files.file_path(self.fi, self.save_path)
 
+    def get_all_filenames(self) -> list[tuple[int, str]]:
+        files = []
+        for fi in range(self.ti.num_files()):
+            files.append((fi, self.files.file_name(fi)))
+        return files
+
     def bytes_to_piece_offset(self, b: int) -> tuple[int, int]:
         pr = self.ti.map_file(self.fi, b, 0)
         return pr.piece, pr.start
 
     def initiate_torrent_download(self):
-        self.th = self.ses.add_torrent({"ti": self.ti, "save_path": self.save_path})
+        if self.th is None: 
+            self.th = self.ses.add_torrent({"ti": self.ti, "save_path": self.save_path})
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         self.th.prioritize_pieces(
             (i, 4)
@@ -49,7 +64,7 @@ class PieceManager(Logging):
             if not self.th.have_piece(i)
         )
         self.th.set_piece_deadline(self.file_end, 0, 0)
-        self.initiate_request(0)
+        self.initiate_request(0) 
 
     def file_size(self) -> int:
         return self.files.file_size(self.fi)
@@ -62,7 +77,8 @@ class PieceManager(Logging):
         for p in range(p_start, p_start + self.preload_pieces):
             self.th.set_piece_deadline(p, p - p_start, 0)
 
-    def cleanup(self): ...
+    def cleanup(self):
+        self.ses.remove_torrent(self.th, lt.session.delete_files) 
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
@@ -139,7 +155,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
     def __init__(
         self,
         *args,
-        piece_manager: PieceManager | None = None,
+        piece_manager: TorrentManager | None = None,
         request: Request | None = None,
         **kwargs,
     ):

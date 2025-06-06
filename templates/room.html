@@ -3,7 +3,7 @@
 
 <head>
         <script>
-                let room_id = "{{ room_id }}";
+                let room_id = "{{ room.room_id }}";
         </script>
         <title>{{ room_name }}</title>
         <meta charset="UTF-8">
@@ -16,22 +16,28 @@
         <h3>You are in a {{ room_id }} room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>
+	<h4>Current file: {{ room.curr_fi }}</h4>
         <div id="video-wrapper">
                 <p id="alert"></p>
                 <video controls id=video preload="auto">
-                        <source src="{{ video }}" type="video/mp4">
+                        <source src="{{ room.video }}" type="video/mp4">
                         Your browser does not support the video tag.
                 </video>
         </div>
         <button id="force-sus">Force suspend</button>
         <div>
                 <p>Set another video:</p>
-                <form action="/rooms/{{ room_id }}" method="POST">
+                <form action="/rooms/{{ room.room_id }}" method="POST">
                         <input id="link" name="link" placeholder="Link to a stuff">
                         <input formmethod="post" type="submit" value="Submit">
                 </form>
         </div>
+        <ol id="files-list">
+                {% for fi, filename in room.files %}
+		<li><a href="/rooms/{{ room.room_id }}/{{ fi }}">{{ filename }}</a></li>
+                {% endfor %}
 
+        </ol>
 
 
         <script src="/static/room.js"></script>

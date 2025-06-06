@@ -1,5 +1,4 @@
 import asyncio
-import re
 from asyncio import Lock, wait_for
 from dataclasses import dataclass, field
 from time import time
@@ -21,22 +20,10 @@ rooms = {}
 lock = Lock()
 
 
-async def get_room(session: AsyncSession, room_id: UUID):
-    async with lock:
-        if room_id not in rooms:
-            room_model = await RoomModel.get_room_id(session, room_id)
-            rooms[room_id] = RoomInfo.from_model(room_model)
-    return rooms[room_id]
-
-
 @dataclass
 class RoomInfo(Logging):
     video_source: VideoSource
-    name: str = field(
-        metadata=dict(
-            validate=lambda d: 4 <= len(d) <= 32 and re.fullmatch(r"[a-zA-Z0-9]*", d)
-        )
-    )
+    name: str
     room_id: UUID
     prev_status: None | VideoStatus = None
     wss: dict[int, WebSocket] = field(default_factory=dict)
@@ -52,7 +39,7 @@ class RoomInfo(Logging):
             "video": self.video_source.get_player_src(),
             "room_name": self.name,
         }
-
+    
     @classmethod
     def from_model(cls, model: RoomModel) -> "RoomInfo":
         vs_cls: type[VideoSource] = enum_to_source[model.video_source]
@@ -64,6 +51,17 @@ class RoomInfo(Logging):
         )
         r.video_source.start()
         return r
+    
+    async def set_new_file(self, new_fi: int) -> bool:
+        if not self.video_source.set_current_fi(new_fi):
+            return False
+        await self.send_room(Commands.reload_cmd(0))
+        await self.change_status(VideoStatus.SUSPEND, -1)
+        await self.handle_set_time(0, -1)
+        return True
+
+    def get_available_files(self):
+        return self.video_source.get_available_files()
 
     async def send_to(self, msg: str, to: int):
         try:
@@ -120,7 +118,7 @@ class RoomInfo(Logging):
         self.logger.info(f"Set current time from {self._current_time} to {ts}")
         self._current_time = ts
         self.last_change = time()
-        self.video_source.cancel()
+        self.video_source.cancel_current_requests()
         await self.send_room(Commands.set_time_cmd(ts), by)
         await self.suspend_by_all(ts)
 
@@ -188,3 +186,11 @@ class RoomInfo(Logging):
         self.prev_status = VideoStatus.PAUSE
         await self.handle_susp_unsusp(Commands.SUSPEND, self.current_time, ws_id)
         await self.send_room(Commands.people_count_cmd(len(self.wss)), -1)
+
+
+async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
+    async with lock:
+        if room_id not in rooms:
+            room_model = await RoomModel.get_room_id(session, room_id)
+            rooms[room_id] = RoomInfo.from_model(room_model)
+    return rooms[room_id]

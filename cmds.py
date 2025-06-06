@@ -9,6 +9,11 @@ class Commands(str, Enum):
     PING = "pi"
     SET_CT = "sc"
     PEOPLE_COUNT = "pc"
+    RELOAD = "rl"
+    
+    @classmethod
+    def reload_cmd(cls, ts: float):
+        return f"{cls.RELOAD.value} {ts}"
 
     @classmethod
     def play_cmd(cls, ts: float):
