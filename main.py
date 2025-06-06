@@ -110,16 +110,14 @@ async def create_room_torrent(
 async def get_video_file(room_id: UUID, request: Request) -> FileResponse:
     async with async_session_maker.begin() as session:
         room = await get_room(session, room_id)
-    return room.video_source.get_video_response(request)
+    return await room.video_source.get_video_response(request)
 
 
 @app.get("/rooms/{room_id}")
 async def inside_room(room_id: UUID, session=Depends(get_session)) -> HTMLResponse:
     room = await get_room(session, room_id)
     return HTMLResponse(
-        env.get_template("room.html").render(
-            **GetRoomSchema.from_room_info(room).model_dump()
-        )
+        env.get_template("room.html").render(GetRoomSchema.from_room_info(room))
     )
 
 
@@ -144,6 +142,7 @@ async def syncing(
 ):
     room = await get_room(session, room_id)
     await room.handle_client(websocket)
+
 
 @app.get("/")
 async def index() -> RedirectResponse:

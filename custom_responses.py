@@ -135,8 +135,6 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
-        while not os.path.isfile(self.path):
-            sync_sleep(0.001)
         if piece_manager is None:
             raise AttributeError("piece manager is not given")
         if request is None:

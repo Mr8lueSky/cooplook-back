@@ -1,5 +1,6 @@
 import abc
 import os
+from asyncio import sleep
 from pathlib import Path
 from uuid import UUID
 
@@ -29,7 +30,7 @@ class VideoSource(abc.ABC):
     def cancel(self): ...
 
     @abc.abstractmethod
-    def get_video_response(self, request) -> Response: ...
+    async def get_video_response(self, request) -> Response: ...
 
 
 class HttpLinkVideoSource(VideoSource):
@@ -47,7 +48,7 @@ class FileVideoSource(VideoSource):
     def __init__(self, file_path: str):
         self.file_path = file_path
 
-    def get_video_response(self, request) -> Response:
+    async def get_video_response(self, request) -> Response:
         return FileResponse(self.file_path)
 
 
@@ -79,8 +80,11 @@ class TorrentVideoSource(VideoSource):
             r.cancel()
         self.resps.clear()
 
-    def get_video_response(self, request) -> Response:
+    async def get_video_response(self, request) -> Response:
         files = self.ti.files()
+        file_path = files.file_path(self.fi, self.save_path)
+        while not os.path.isfile(file_path):
+            await sleep(0.01)
         r = LoadingTorrentFileResponse(
             files.file_path(self.fi, self.save_path),
             piece_manager=self.pm,
