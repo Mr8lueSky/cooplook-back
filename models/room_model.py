@@ -72,17 +72,22 @@ class RoomModel(MappedAsDataclass, BaseModel):
         room_id: UUID,
         last_watch_ts: Optional[float] = None,
         last_file_ind: Optional[int] = None,
+        name: Optional[str] = None,
+        video_source: Optional[VideoSourcesEnum] = None,
+        video_source_data: Optional[str] = None,
     ):
         values = {}
         if last_watch_ts is not None:
-            values['last_watch_ts'] = last_watch_ts
+            values["last_watch_ts"] = last_watch_ts
         if last_file_ind is not None:
-            values['last_file_ind'] = last_file_ind
-        stmt = (
-            update(RoomModel)
-            .where(RoomModel.room_id == room_id)
-            .values(**values)
-        )
+            values["last_file_ind"] = last_file_ind
+        if name is not None:
+            values["name"] = name
+        if video_source is not None:
+            values["video_source"] = video_source
+        if video_source_data is not None:
+            values["video_source_data"] = video_source_data
+        stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
         await session.execute(stmt)
 
     @classmethod

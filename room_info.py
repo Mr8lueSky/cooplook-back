@@ -24,8 +24,6 @@ lock = Lock()
 async def get_room(session: AsyncSession, room_id: UUID):
     async with lock:
         if room_id not in rooms:
-            from models.room_model import RoomModel
-
             room_model = await RoomModel.get_room_id(session, room_id)
             rooms[room_id] = RoomInfo.from_model(room_model)
     return rooms[room_id]
@@ -57,14 +55,13 @@ class RoomInfo(Logging):
 
     @classmethod
     def from_model(cls, model: RoomModel) -> "RoomInfo":
-        vs_cls = enum_to_source[model.video_source]
+        vs_cls: type[VideoSource] = enum_to_source[model.video_source]
         r = RoomInfo(
-            vs_cls(model.video_source_data, model.last_file_ind),
+            vs_cls(model.video_source_data, model.last_file_ind, model.room_id),
             model.name,
             model.room_id,
             _current_time=model.last_watch_ts,
         )
-        r.video_source.set_room_id(r.room_id)
         r.video_source.start()
         return r
 

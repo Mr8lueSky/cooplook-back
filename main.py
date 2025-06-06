@@ -143,7 +143,6 @@ async def syncing(
     room = await get_room(session, room_id)
     await room.handle_client(websocket)
 
-
 @app.get("/")
 async def index() -> RedirectResponse:
     return RedirectResponse("/rooms/", 303)

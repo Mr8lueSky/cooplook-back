@@ -1,10 +1,8 @@
 import asyncio
-import os
 from asyncio import Task, sleep
+from collections.abc import AsyncGenerator
 from secrets import token_hex
-from time import sleep as sync_sleep
 from time import time
-from typing import AsyncGenerator
 
 import libtorrent as lt
 from starlette.requests import Request
@@ -15,45 +13,54 @@ from logger import Logging
 
 
 class PieceManager(Logging):
-    preload_pieces = 50
+    preload_pieces: int = 50
 
-    def __init__(
-        self,
-        session: lt.session,
-        th: lt.torrent_handle,
-        ti: lt.torrent_info,
-        file_index: int,
-    ):
-        self.piece_buffer = {}
-        self.piece_wait = {}
-        self.ses = session
-        self.th: lt.torrent_handle = th
-        self.ti = ti
-        self.fi = file_index
-        self.start, self.start_offset = self.bytes_to_piece_offset(0)
-        self.last_piece = self.start
-        self.end, self.end_offset = self.bytes_to_piece_offset(self.file_size())
+    def __init__(self, torrent: bytes | str, file_index: int, save_path: str):
+        self.th: lt.torrent_handle | None = None
+        self.ti: lt.torrent_info = lt.torrent_info(torrent)
+        self.piece_buffer: dict[int, bytes] = {}
+        self.piece_wait: dict[int, int] = {}
+        self.ses: lt.session = lt.session()
+        self.fi: int = file_index
+        self.files: lt.file_storage = self.ti.files()
+        self.file_start, self.file_start_offset = self.bytes_to_piece_offset(0)
+        self.last_used_piece = self.file_start
+        self.file_end, self.file_end_offset = self.bytes_to_piece_offset(
+            self.file_size()
+        )
+        self.save_path = save_path
 
-    def bytes_to_piece_offset(self, b: int):
+    def get_curent_filename(self) -> str:
+        return self.files.file_name(self.fi)
+
+    def get_current_filepath(self) -> str:
+        return self.files.file_path(self.fi, self.save_path)
+
+    def bytes_to_piece_offset(self, b: int) -> tuple[int, int]:
         pr = self.ti.map_file(self.fi, b, 0)
         return pr.piece, pr.start
 
     def initiate_torrent_download(self):
+        self.th = self.ses.add_torrent({"ti": self.ti, "save_path": self.save_path})
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         self.th.prioritize_pieces(
-            (i, 4) for i in range(self.start, self.end + 1) if not self.th.have_piece(i)
+            (i, 4)
+            for i in range(self.file_start, self.file_end + 1)
+            if not self.th.have_piece(i)
         )
-        self.th.set_piece_deadline(self.end, 0, 0)
+        self.th.set_piece_deadline(self.file_end, 0, 0)
         self.initiate_request(0)
 
-    def file_size(self):
-        return self.ti.files().file_size(self.fi)
+    def file_size(self) -> int:
+        return self.files.file_size(self.fi)
 
     def initiate_request(self, b_start: int):
+        if self.th is None:
+            raise RuntimeError("Torrent download in not initialized!")
         p_start, _ = self.bytes_to_piece_offset(b_start)
         self.logger.debug(f"Setting deadlines from {p_start=}")
         for p in range(p_start, p_start + self.preload_pieces):
-            self.th.set_piece_deadline(p, p - self.last_piece, 0)
+            self.th.set_piece_deadline(p, p - p_start, 0)
 
     def cleanup(self): ...
 
@@ -74,7 +81,7 @@ class PieceManager(Logging):
                 fr = start_offset
             if piece_id == end:
                 to = end_offset
-            self.last_piece = piece_id
+            self.last_used_piece = piece_id
             yield piece[fr:to]
 
     def increment_queue(self, piece_id: int):
@@ -86,12 +93,14 @@ class PieceManager(Logging):
             self.piece_wait.pop(piece_id, None)
             self.piece_buffer.pop(piece_id, None)
 
-    async def get_piece(self, piece_id: int, timeout_s: int = 60):
+    async def get_piece(self, piece_id: int, timeout_s: int = 60) -> bytes:
+        if self.th is None:
+            raise RuntimeError("Download is not initiated!")
         next_p = piece_id + self.preload_pieces
-        if piece_id not in self.piece_wait and next_p <= self.end:
+        if piece_id not in self.piece_wait and next_p <= self.file_end:
             self.logger.debug(f"Setting deadline for {piece_id + self.preload_pieces}")
             self.th.set_piece_deadline(
-                piece_id + self.preload_pieces, self.last_piece - piece_id, 0
+                piece_id + self.preload_pieces, self.last_used_piece - piece_id, 0
             )
         self.increment_queue(piece_id)
         finish = time() + timeout_s
@@ -167,12 +176,15 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            async for body, more_body in self._download_range(0):
-                await send(
-                    {"type": "http.response.body", "body": body, "more_body": more_body}
+            async with asyncio.TaskGroup() as tg:
+                self.tasks.append(
+                    tg.create_task(self._download_single_range(send, 0))
                 )
+                while not await self.request.is_disconnected():
+                    await sleep(1)
+                self.cancel()
 
-    async def _download_single_range(self, send: Send, start: int, end: int):
+    async def _download_single_range(self, send: Send, start: int, end: int = -1):
         async for body, more_body in self._download_range(start, end):
             await send(
                 {"type": "http.response.body", "body": body, "more_body": more_body}
