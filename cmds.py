@@ -41,10 +41,6 @@ class Commands(str, Enum):
         return f"{cls.PING.value} {ts}"
 
     @classmethod
-    def set_time_cmd(cls, ts: float):
-        return f"{cls.SET_CT.value} {ts}"
-
-    @classmethod
     def people_count_cmd(cls, people_cnt: int):
         return f"{cls.PEOPLE_COUNT.value} {people_cnt}"
 

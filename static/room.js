@@ -220,7 +220,6 @@ fsButton.addEventListener("click", () => {
 videoElem.addEventListener("timeupdate", () => {
         if (Math.abs(last_ts - videoElem.currentTime) > 2) {
                 console.log(`Peremotka ${last_ts}, ${videoElem.currentTime}`)
-                sendCommand(SET_CT, videoElem.currentTime)
         } else {
                 sendCommand(PING, videoElem.currentTime)
         }
