@@ -27,7 +27,7 @@ class RoomInfo(Logging):
     video_source: VideoSource
     name: str
     room_id: UUID
-    prev_status: None | VideoStatus = VideoStatus.PLAY
+    prev_status: VideoStatus = VideoStatus.PAUSE
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
     _current_time: float = 0
@@ -102,9 +102,8 @@ class RoomInfo(Logging):
             self.suspend_by.remove(by)
 
         if not self.suspend_by and self.status == VideoStatus.SUSPEND:
-            new_status = VideoStatus.PLAY
             await self.send_room(Commands.unsuspend_cmd(self.current_time))
-            await self.change_status(new_status, ts_str, -1)
+            await self.change_status(self.prev_status, ts_str, -1)
 
     async def suspend_by_all(self, ts_str: str):
         for i in self.wss.keys():
@@ -159,6 +158,7 @@ class RoomInfo(Logging):
     @current_time.setter
     def current_time(self, ts: float):
         self.logger.info(f"Set current time from {self._current_time} to {ts}")
+        self.video_source.cancel_current_requests()
         self._current_time = ts
         self.last_change = time()
 
