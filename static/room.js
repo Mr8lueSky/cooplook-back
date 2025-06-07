@@ -1,6 +1,5 @@
 const PLAY = "pl"
 const PAUSE = "pa"
-const PING = "pi"
 const SET_CT = "sc"
 const PEOPLE_COUNT = "pc"
 const SUSPEND = "sp"
@@ -217,18 +216,7 @@ fsButton.addEventListener("click", () => {
         suspend = true;
 })
 
-videoElem.addEventListener("timeupdate", () => {
-        if (Math.abs(last_ts - videoElem.currentTime) > 2) {
-                console.log(`Peremotka ${last_ts}, ${videoElem.currentTime}`)
-        } else {
-                sendCommand(PING, videoElem.currentTime)
-        }
-
-        last_ts = videoElem.currentTime;
-})
-
 videoElem.addEventListener("error", () => {
-	// reloadVideo()
 })
 
 if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" ||

@@ -15,10 +15,6 @@ class Commands(str, Enum):
     @classmethod
     def change_file_cmd(cls, fi: int):
         return f"{cls.CHANGE_FILE.value} {fi}"
-    
-    @classmethod
-    def reload_cmd(cls, ts: float):
-        return f"{cls.RELOAD.value} {ts}"
 
     @classmethod
     def play_cmd(cls, ts: float):
@@ -35,10 +31,6 @@ class Commands(str, Enum):
     @classmethod
     def unsuspend_cmd(cls, ts: float):
         return f"{cls.UNSUSPEND.value} {ts}"
-
-    @classmethod
-    def ping_cmd(cls, ts: float):
-        return f"{cls.PING.value} {ts}"
 
     @classmethod
     def people_count_cmd(cls, people_cnt: int):

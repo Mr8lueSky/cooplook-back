@@ -133,16 +133,6 @@ async def inside_room(room_id: UUID, session=Depends(get_session)) -> HTMLRespon
         )
     )
 
-
-@app.get("/rooms/{room_id}/{fi}")
-async def set_curr_file(
-    room_id: UUID = Path(), fi: int = Path(), session=Depends(get_session)
-):
-    room = await get_room(session, room_id)
-    await room.set_new_file(fi)
-    return RedirectResponse(f"/rooms/{room_id}", status_code=303)
-
-
 @app.get("/rooms/")
 async def list_rooms(session=Depends(get_session)) -> HTMLResponse:
     rooms = await RoomModel.get_all(session)

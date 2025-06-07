@@ -27,7 +27,7 @@ class RoomInfo(Logging):
     video_source: VideoSource
     name: str
     room_id: UUID
-    prev_status: None | VideoStatus = None
+    prev_status: None | VideoStatus = VideoStatus.PLAY
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
     _current_time: float = 0
@@ -48,13 +48,13 @@ class RoomInfo(Logging):
         r.video_source.start()
         return r
 
-    async def set_new_file(self, new_fi_str: str, ws_id: int) -> bool:
+    async def handle_set_new_file(self, new_fi_str: str, ws_id: int) -> bool:
         new_fi = int(new_fi_str)
         if not self.video_source.set_current_fi(new_fi):
             return False
         await self.send_room(Commands.change_file_cmd(new_fi), ws_id)
+        await self.handle_play_pause(Commands.PAUSE, '0', -1)
         asyncio.gather(*(self.initial(ws, ws_id) for ws_id, ws in self.wss.items()))
-        self.current_time = 0
         return True
 
     def get_available_files(self):
@@ -73,11 +73,9 @@ class RoomInfo(Logging):
             *(self.send_to(msg, ws_id) for ws_id in self.wss.keys() if ws_id != by)
         )
 
-    async def change_status(self, new_status: VideoStatus, by: int):
+    async def change_status(self, new_status: VideoStatus, ts_str: str, by: int):
         self.logger.info(f"Changing status to {new_status}")
-        if self.status == new_status:
-            return
-        self._current_time = self.current_time
+        self._current_time = float(ts_str) 
         self.prev_status = self.status
         self.status = new_status
         self.last_change = time()
@@ -92,23 +90,21 @@ class RoomInfo(Logging):
         ts = float(ts_str)
         if abs(ts - self.current_time) > MOE:
             self.current_time = ts
-        await self.change_status(VideoStatus(cmd), by)
+        await self.change_status(VideoStatus(cmd), ts_str, by)
 
     async def handle_susp_unsusp(self, cmd: Commands, ts_str: str, by: int):
         if cmd == Commands.SUSPEND:
             self.suspend_by.add(by)
             if not self.status == VideoStatus.SUSPEND:
-                await self.change_status(VideoStatus.SUSPEND, -1)
+                await self.change_status(VideoStatus.SUSPEND, ts_str, -1)
 
         if cmd == Commands.UNSUSPEND and by in self.suspend_by:
             self.suspend_by.remove(by)
 
         if not self.suspend_by and self.status == VideoStatus.SUSPEND:
-            new_status = self.prev_status or VideoStatus.PLAY
+            new_status = VideoStatus.PLAY
             await self.send_room(Commands.unsuspend_cmd(self.current_time))
-            await self.change_status(new_status, -1)
-
-    async def handle_ping(self, ts_str: str, to: int): ...
+            await self.change_status(new_status, ts_str, -1)
 
     async def suspend_by_all(self, ts_str: str):
         for i in self.wss.keys():
@@ -118,15 +114,12 @@ class RoomInfo(Logging):
         self.logger.debug(f"Rc: {ws_id}, {data}")
         cmd, arg = data.split(" ")
         cmd = Commands(cmd)
-        if cmd == Commands.PING:
-            await self.handle_ping(arg, ws_id)
-            return
-        elif cmd == Commands.PLAY or cmd == Commands.PAUSE:
+        if cmd == Commands.PLAY or cmd == Commands.PAUSE:
             await self.handle_play_pause(cmd, arg, ws_id)
         elif cmd == Commands.SUSPEND or cmd == Commands.UNSUSPEND:
             await self.handle_susp_unsusp(cmd, arg, ws_id)
         elif cmd == Commands.CHANGE_FILE:
-            await self.set_new_file(arg, ws_id)
+            await self.handle_set_new_file(arg, ws_id)
         async with async_session_maker.begin() as session:
             await RoomModel.update(
                 session, self.room_id, self.current_time, self.video_source.fi
@@ -149,14 +142,8 @@ class RoomInfo(Logging):
             await self.initial(websocket, ws_id)
             self.logger.info(f"Client {ws_id} connected")
             while True:
-                try:
-                    data = await wait_for(websocket.receive_text(), MOE)
-                    await self.handle_cmd(data, ws_id)
-                except TimeoutError:
-                    if self.status != VideoStatus.PLAY:
-                        continue
-                    self.logger.info(f"Timeout for {ws_id}")
-                    await self.change_status(VideoStatus.SUSPEND, ws_id)
+                data = await websocket.receive_text()
+                await self.handle_cmd(data, ws_id)
         except WebSocketDisconnect:
             self.logger.info(f"User {ws_id} disconnected")
         except Exception as exc:
