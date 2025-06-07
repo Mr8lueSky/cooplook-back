@@ -115,33 +115,36 @@ class TorrentManager(Logging):
         if self.th is None:
             raise RuntimeError("Download is not initiated!")
         next_p = piece_id + self.preload_pieces
+        self.logger.debug(f"Setting deadline for {piece_id + self.preload_pieces}")
         if piece_id not in self.piece_wait and next_p <= self.file_end:
-            self.logger.debug(f"Setting deadline for {piece_id + self.preload_pieces}")
             self.th.set_piece_deadline(
                 piece_id + self.preload_pieces, self.last_used_piece - piece_id, 0
             )
         self.increment_queue(piece_id)
         finish = time() + timeout_s
 
+        self.logger.debug(f"Waiting for {piece_id}")
         while not self.th.have_piece(piece_id) and finish > time():
-            await sleep(0.01)
+            await sleep(0)
 
         if not self.th.have_piece(piece_id):
             self.decrement_queue(piece_id)
             raise AttributeError(
                 f"Don't have {piece_id} after {timeout_s}! "
-                f"Priority: {self.th.piece_priority(piece_id)}"
+                f"Priority: {self.th.piece_priority(piece_id)} "
+                f"Have piece: {self.th.have_piece(piece_id)}"
             )
 
         self.th.read_piece(piece_id)
-
+        
+        self.logger.debug(f"Waiting for read on {piece_id}")
         while piece_id not in self.piece_buffer and finish > time():
             alerts = self.ses.pop_alerts()
             for a in alerts:
                 if isinstance(a, lt.read_piece_alert) and self.piece_wait.get(a.piece):
                     self.logger.debug(f"Got {a.piece}")
                     self.piece_buffer[a.piece] = a.buffer
-            await sleep(0.01)
+            await sleep(0)
 
         if piece_id not in self.piece_buffer:
             self.decrement_queue(piece_id)
@@ -174,6 +177,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
     def cancel(self):
         for task in self.tasks:
             task.cancel()
+        self.tasks.clear()
 
     async def _download_range(self, start: int, end: int = -1):
         if end == -1:
@@ -198,7 +202,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                 self.tasks.append(
                     tg.create_task(self._download_single_range(send, 0))
                 )
-                while not await self.request.is_disconnected():
+                while not await self.request.is_disconnected() and self.tasks:
                     await sleep(1)
                 self.cancel()
 
@@ -207,6 +211,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
             await send(
                 {"type": "http.response.body", "body": body, "more_body": more_body}
             )
+        self.logger.debug(f"Request {start}-{end} fully finished")
 
     async def _handle_single_range(
         self, send: Send, start: int, end: int, file_size: int, send_header_only: bool
@@ -223,8 +228,10 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                 self.tasks.append(
                     tg.create_task(self._download_single_range(send, start, end))
                 )
-                while not await self.request.is_disconnected():
+                while not await self.request.is_disconnected() and self.tasks:
                     await sleep(1)
+                if await self.request.is_disconnected():
+                    self.logger.debug("Request dicsonnected by client")
                 self.cancel()
 
     async def _handle_multiple_ranges(

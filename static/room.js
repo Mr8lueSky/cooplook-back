@@ -7,6 +7,7 @@ const SUSPEND = "sp"
 const UNSUSPEND = "up"
 const FORCE_UNSUSPEND = "fu"
 const RELOAD = "rl"
+const CHANGE_FILE = "cf"
 
 let suspend = false;
 let initial = true;
@@ -24,6 +25,8 @@ let fsButton = document.getElementById("force-sus")
 let peopleCountElem = document.getElementById("people-count");
 let currentStatusElem = document.getElementById("current-status");
 let alertElem = document.getElementById("alert");
+let selectFileElem = document.getElementById("select-file")
+let videoContainer = document.getElementById("video-wrapper")
 
 let currentStatus = "";
 
@@ -32,6 +35,24 @@ let cmdToStatus = {
         [PAUSE]: "PAUSE",
         [SUSPEND]: "SUSPEND",
 };
+
+let showOnOpen = [selectFileElem, videoElem];
+
+function reloadVideo() {
+        videoElem.load();
+	videoElem.currentTime = 0;
+        // ws.close()
+        // ws = createSocket()
+	// window.location.reload()
+}
+let selectFile = (event) => {
+        let newFile = selectFileElem.value;
+        console.log(`Selecting file ${newFile}!`)
+	sendCommand(CHANGE_FILE,newFile)
+	reloadVideo()
+}
+
+
 
 function setStatus(newStatus) {
         if (!(newStatus in cmdToStatus)) {
@@ -104,59 +125,77 @@ videoElem.addEventListener("pause", async () => {
         console.log("Pause event")
 })
 
-async function wsOnMessage(message) {
-        let [cmd, ts] = message.data.split(' ')
-        ts = parseFloat(ts)
-        console.log(`Command rc: ${cmd}, current time: ${ts}`)
-        if (cmd == SET_CT) {
-                videoElem.currentTime = ts;
-                last_ts = ts;
-        } else if (cmd == PLAY) {
-                console.log("PLAY FROM SERVER")
-                setStatus(PLAY);
-                videoElem.currentTime = ts;
-                await play_video()
-        } else if (cmd == PAUSE) {
-                setStatus(PAUSE);
-                console.log("PAUSE FROM SERVER")
-                videoElem.currentTime = ts;
-                await pause_video()
-        } else if (cmd == SUSPEND) {
-                console.log("SUSPEND")
-                setStatus(SUSPEND);
-                await pause_video()
-                suspend = true;
-        } else if (cmd == UNSUSPEND) {
-                console.log("UNSUSPEND")
-                suspend = false;
-        } else if (cmd == PEOPLE_COUNT) {
-                peopleCountElem.textContent = ts;
-                return;
-        } else if (cmd == RELOAD) {
-		window.location.reload();
-		return;
-	}
 
-        videoElem.currentTime = ts;
+
+
+let createSocket = () => {
+        let websocket = new WebSocket(`/rooms/${room_id}/ws`);
+        async function wsOnMessage(message) {
+                let [cmd, arg] = message.data.split(' ')
+                arg = parseFloat(arg)
+                console.log(`Command rc: ${cmd}, current time: ${arg}`)
+                if (cmd == SET_CT) {
+                        videoElem.currentTime = arg;
+                        last_ts = arg;
+                } else if (cmd == PLAY) {
+                        console.log("PLAY FROM SERVER")
+                        setStatus(PLAY);
+                        videoElem.currentTime = arg;
+                        await play_video()
+                } else if (cmd == PAUSE) {
+                        setStatus(PAUSE);
+                        console.log("PAUSE FROM SERVER")
+                        videoElem.currentTime = arg;
+                        await pause_video()
+                } else if (cmd == SUSPEND) {
+                        console.log("SUSPEND")
+                        setStatus(SUSPEND);
+                        await pause_video()
+                        suspend = true;
+                } else if (cmd == UNSUSPEND) {
+                        console.log("UNSUSPEND")
+                        suspend = false;
+                } else if (cmd == PEOPLE_COUNT) {
+                        peopleCountElem.textContent = arg;
+                        return;
+                } else if (cmd == RELOAD) {
+                        window.location.reload();
+                        return;
+                } else if (cmd == CHANGE_FILE) {
+			reloadVideo();
+			selectFileElem.selectedIndex = arg;
+			return;
+		}
+
+                videoElem.currentTime = arg;
+        }
+        websocket.onclose = async () => {
+                console.log("Socket closed.")
+                showOnOpen.forEach(element => element.hidden = true);
+        }
+        websocket.onopen = async () => {
+                console.log("Socket open.")
+                showOnOpen.forEach(element => element.hidden = false);
+        }
+        websocket.onmessage = wsOnMessage;
+        return websocket
 }
 
-
-
-let ws = new WebSocket(`/rooms/${room_id}/ws`);
-ws.onmessage = wsOnMessage;
+showOnOpen.forEach(element => element.hidden = true);
+let ws = createSocket();
 
 
 let sendCommand = (cmd, data) => {
         console.log(`Sn: ${cmd} ${data}`)
-        ws.send(`${cmd} ${data}`)
+        try {
+                ws.send(`${cmd} ${data}`)
+        } catch (exc) {
+                console.error(`Caught error: ${exc}`)
+        }
 }
 
 
-ws.onclose = async () => {
-        console.log("Socket closed.")
-        videoElem.remove();
 
-}
 
 videoElem.addEventListener("playing", () => {
         console.log("Playing!")
@@ -179,13 +218,18 @@ fsButton.addEventListener("click", () => {
 })
 
 videoElem.addEventListener("timeupdate", () => {
-        if (Math.abs(last_ts - videoElem.currentTime) > 1) {
-                console.log("Peremotka")
+        if (Math.abs(last_ts - videoElem.currentTime) > 2) {
+                console.log(`Peremotka ${last_ts}, ${videoElem.currentTime}`)
                 sendCommand(SET_CT, videoElem.currentTime)
         } else {
                 sendCommand(PING, videoElem.currentTime)
         }
+
         last_ts = videoElem.currentTime;
+})
+
+videoElem.addEventListener("error", () => {
+	// reloadVideo()
 })
 
 if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" ||
@@ -194,3 +238,5 @@ if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(vi
         newElement.textContent = "Влючи автоплей, ублюдок"
         document.getElementsByTagName("body")[0].insertAdjacentElement("beforebegin", newElement)
 }
+
+selectFileElem.addEventListener("change", selectFile)

@@ -98,7 +98,7 @@ class TorrentVideoSource(VideoSource):
     async def get_video_response(self, request) -> LoadingTorrentFileResponse:
         file_path = self.tm.get_current_filepath()
         while not os.path.isfile(file_path):
-            await sleep(0.01)
+            await sleep(0)
         r = LoadingTorrentFileResponse(
             file_path,
             piece_manager=self.tm,

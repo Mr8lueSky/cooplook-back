@@ -5,7 +5,7 @@
         <script>
                 let room_id = "{{ room.room_id }}";
         </script>
-        <title>{{ room_name }}</title>
+        <title>{{ room.name }}</title>
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <meta http-equiv="X-UA-Compatible" content="ie=edge">
@@ -13,10 +13,9 @@
 </head>
 
 <body>
-        <h3>You are in a {{ room_id }} room!</h3>
+        <h3>You are in a {{ room.name }} room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>
-	<h4>Current file: {{ room.curr_fi }}</h4>
         <div id="video-wrapper">
                 <p id="alert"></p>
                 <video controls id=video preload="auto">
@@ -32,14 +31,11 @@
                         <input formmethod="post" type="submit" value="Submit">
                 </form>
         </div>
-        <ol id="files-list">
-                {% for fi, filename in room.files %}
-		<li><a href="/rooms/{{ room.room_id }}/{{ fi }}">{{ filename }}</a></li>
-                {% endfor %}
-
-        </ol>
-
-
+	<select id="select-file">
+	{% for fi, filename in room.files %}
+		<option value="{{ fi }}" {% if room.curr_fi == fi %} selected {% endif %} >{{ filename }}</option>	
+	{% endfor %}
+	</select>
         <script src="/static/room.js"></script>
 </body>
 

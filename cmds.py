@@ -10,6 +10,11 @@ class Commands(str, Enum):
     SET_CT = "sc"
     PEOPLE_COUNT = "pc"
     RELOAD = "rl"
+    CHANGE_FILE = "cf"
+
+    @classmethod
+    def change_file_cmd(cls, fi: int):
+        return f"{cls.CHANGE_FILE.value} {fi}"
     
     @classmethod
     def reload_cmd(cls, ts: float):

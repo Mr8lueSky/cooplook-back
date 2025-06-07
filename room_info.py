@@ -48,12 +48,17 @@ class RoomInfo(Logging):
         r.video_source.start()
         return r
 
-    async def set_new_file(self, new_fi: int) -> bool:
+    async def set_new_file(self, new_fi_str: str, ws_id: int) -> bool:
+        new_fi = int(new_fi_str)
         if not self.video_source.set_current_fi(new_fi):
             return False
-        await self.send_room(Commands.reload_cmd(0))
-        await self.change_status(VideoStatus.SUSPEND, -1)
-        await self.handle_set_time(0, -1)
+        await self.send_room(Commands.change_file_cmd(new_fi), ws_id)
+        asyncio.gather(
+                *(self.initial(ws, ws_id) for ws_id, ws in self.wss.items()))
+        # await self.change_status(VideoStatus.SUSPEND, ws_id)
+        await self.handle_set_time(str(0), ws_id, cancel_reqs=True)
+
+        
         return True
 
     def get_available_files(self):
@@ -91,7 +96,7 @@ class RoomInfo(Logging):
         if self.status.value != cmd.value:
             await self.change_status(VideoStatus(cmd), by)
 
-    async def handle_susp_unsusp(self, cmd: Commands, ts: float, by: int):
+    async def handle_susp_unsusp(self, cmd: Commands, ts_str: str, by: int):
         if cmd == Commands.SUSPEND:
             self.suspend_by.add(by)
             if not self.status == VideoStatus.SUSPEND:
@@ -101,41 +106,46 @@ class RoomInfo(Logging):
             self.suspend_by.remove(by)
 
         if not self.suspend_by and self.status == VideoStatus.SUSPEND:
-            await self.handle_set_time(ts, by)
+            await self.handle_set_time(ts_str, by)
             new_status = self.prev_status or VideoStatus.PLAY
             await self.send_room(Commands.unsuspend_cmd(self.current_time))
             await self.change_status(new_status, -1)
 
-    async def handle_ping(self, ts: float, to: int):
+    async def handle_ping(self, ts_str: str, to: int):
+        ts = float(ts_str)
         if not (ts - MOE <= self.current_time <= ts + MOE):
             await self.send_to(Commands.set_time_cmd(self.current_time), to)
 
-    async def handle_set_time(self, ts: float, by: int):
+    async def handle_set_time(self, ts_str: str, by: int, cancel_reqs: bool = False):
+        ts = float(ts_str)
         self.logger.info(f"Set current time from {self._current_time} to {ts}")
         self._current_time = ts
         self.last_change = time()
-        self.video_source.cancel_current_requests()
+        if cancel_reqs:
+            self.logger.debug("Canceling requests because time is changing")
+            self.video_source.cancel_current_requests()
         await self.send_room(Commands.set_time_cmd(ts), by)
-        await self.suspend_by_all(ts)
+        await self.suspend_by_all(ts_str)
 
-    async def suspend_by_all(self, ts: float):
+    async def suspend_by_all(self, ts_str: str):
         for i in self.wss.keys():
-            await self.handle_susp_unsusp(Commands.SUSPEND, ts, i)
-
+            await self.handle_susp_unsusp(Commands.SUSPEND, ts_str, i)
+    
     async def handle_cmd(self, data: str, ws_id: int):
         self.logger.debug(f"Rc: {ws_id}, {data}")
-        cmd, ts = data.split(" ")
-        ts = float(ts)
+        cmd, arg = data.split(" ")
         cmd = Commands(cmd)
         if cmd == Commands.PING:
-            await self.handle_ping(ts, ws_id)
+            await self.handle_ping(arg, ws_id)
             return
         elif cmd == Commands.PLAY or cmd == Commands.PAUSE:
             await self.handle_play_pause(cmd, ws_id)
         elif cmd == Commands.SUSPEND or cmd == Commands.UNSUSPEND:
-            await self.handle_susp_unsusp(cmd, ts, ws_id)
+            await self.handle_susp_unsusp(cmd, arg, ws_id)
         elif cmd == Commands.SET_CT:
-            await self.handle_set_time(ts, ws_id)
+            await self.handle_set_time(arg, ws_id)
+        elif cmd == Commands.CHANGE_FILE:
+            await self.set_new_file(arg, ws_id)
         async with async_session_maker.begin() as session:
             await RoomModel.update(
                 session, self.room_id, self.current_time, self.video_source.fi
@@ -144,7 +154,7 @@ class RoomInfo(Logging):
     async def handle_leave(self, ws_id: int):
         self.wss.pop(ws_id, None)
         if ws_id in self.suspend_by:
-            await self.handle_susp_unsusp(Commands.UNSUSPEND, self.current_time, ws_id)
+            await self.handle_susp_unsusp(Commands.UNSUSPEND, str(self.current_time), ws_id)
         await self.handle_play_pause(Commands.PAUSE, -1)
         await self.send_room(Commands.people_count_cmd(len(self.wss)))
         self.last_leave_ts = time()
@@ -181,7 +191,7 @@ class RoomInfo(Logging):
         await ws.accept()
         await self.send_to(Commands.set_time_cmd(self.current_time), ws_id)
         self.prev_status = VideoStatus.PAUSE
-        await self.handle_susp_unsusp(Commands.SUSPEND, self.current_time, ws_id)
+        await self.handle_susp_unsusp(Commands.SUSPEND, str(self.current_time), ws_id)
         await self.send_room(Commands.people_count_cmd(len(self.wss)), -1)
 
     async def cleanup(self):

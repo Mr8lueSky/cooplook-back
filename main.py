@@ -94,23 +94,6 @@ if ENV == "DEV":
             return ""
         return vs.tm.th.have_piece(piece_id)
 
-    @app.get("/from_torrent")
-    def from_torrent():
-        return HTMLResponse(
-            f"""<video controls preload=none id=video width="640" height="480">
-        <source src="/files/{TORRENT_ROOM_UUID}" type="video/mp4">
-        Your browser does not support the video tag.
-    </video>
-    <script>
-    let videoElem = document.getElementById("video")
-
-    videoElem.addEventListener("canplay", (event) => {{console.log("canplay")}} )
-    videoElem.addEventListener("waiting", (event) => {{console.log("waitingsolong")}} )
-    videoElem.addEventListener("playing", (event) => {{console.log("playing")}} )
-    </script>
-    """
-        )
-
 
 @app.post("/rooms/from_link")
 async def create_room_from_link(
