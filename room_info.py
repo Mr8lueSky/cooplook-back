@@ -158,7 +158,6 @@ class RoomInfo(Logging):
     @current_time.setter
     def current_time(self, ts: float):
         self.logger.info(f"Set current time from {self._current_time} to {ts}")
-        self.video_source.cancel_current_requests()
         self._current_time = ts
         self.last_change = time()
 
