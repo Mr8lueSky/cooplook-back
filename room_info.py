@@ -12,13 +12,14 @@ from starlette.websockets import WebSocketDisconnect
 from cmds import Commands, VideoStatus
 from config import ROOM_INACTIVITY_PERIOD
 from engine import async_session_maker
-from logger import Logging
+from logger import Logging, create_logger
 from models.room_model import RoomModel, enum_to_source
 from video_sources import VideoSource
 
 MOE = 1
-rooms: dict[UUID, 'RoomInfo'] = {}
+rooms: dict[UUID, "RoomInfo"] = {}
 lock = Lock()
+monitor_logger = create_logger("RoomMonitor")
 
 
 @dataclass
@@ -198,21 +199,25 @@ async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
 
 async def _monitor_rooms():
     while True:
-        await asyncio.sleep(ROOM_INACTIVITY_PERIOD)
-        print("Starting clean up of the rooms")
+        await asyncio.sleep(60)
+        monitor_logger.info("Starting room cleanup")
         for room_id, room in tuple(rooms.items()):
             async with lock:
                 if (
                     len(room.wss)
                     or time() - room.last_leave_ts < ROOM_INACTIVITY_PERIOD
                 ):
+                    monitor_logger.debug(
+                        f"Skipping room {room_id}. "
+                        f"Time from last leave: {time() - room.last_leave_ts}, "
+                        f"people count: {len(room.wss)}"
+                    )
                     continue
                 room = rooms.pop(room_id)
             await room.cleanup()
-            print(f"{room_id} is cleaned")
+            monitor_logger.debug(f"Cleaned room {room_id}")
             await asyncio.sleep(0)
-        print("Cleanup ended")
+        monitor_logger.info("Room cleanup finished")
 
 async def monitor_rooms():
     asyncio.create_task(_monitor_rooms())
-

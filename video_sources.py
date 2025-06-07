@@ -81,7 +81,6 @@ class TorrentVideoSource(VideoSource):
         return True
     
     def cleanup(self):
-        print("Cleanup called")
         self.tm.cleanup()
 
     def start(self):

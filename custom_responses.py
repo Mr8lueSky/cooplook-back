@@ -81,7 +81,6 @@ class TorrentManager(Logging):
         if self.th is None:
             return
         self.ses.remove_torrent(self.th, lt.session.delete_files) 
-        print("remove torrent")
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
