@@ -3,11 +3,12 @@ from typing import Annotated, Any, Callable, Optional
 from uuid import UUID
 
 import libtorrent as lt
-from fastapi import HTTPException, UploadFile
+from fastapi import UploadFile
 from pydantic import Field, model_validator
 from pydantic_core import core_schema
 
 from config import MAX_TORRENT_FILE_SIZE
+from exceptions import ContentTooLarge, UnprocessableEntity
 from models.room_model import RoomModel
 from room_info import RoomInfo
 from schemas.base_schema import BaseSchema
@@ -36,9 +37,7 @@ class FileSizeValidator:
         assert value.size, "Unknown size of a file!"
         max_size = float("inf") if self.max_size is None else self.max_size
         if max_size < value.size:
-            raise HTTPException(
-                413, {"error": f"File to large. Max is {max_size / 1024 / 1024} Mb."}
-            )
+            raise ContentTooLarge(f"File to large. Max is {max_size / 1024 / 1024} Mb.")
         return value
 
     def __get_pydantic_core_schema__(self, source_type: Any, handler):
@@ -64,7 +63,7 @@ class CreateRoomTorrentSchema(BaseSchema):
     def set_content(cls, values):
         values.file_content = values.torrent_file.file.read()
         if not is_valid_torrent(values.file_content):
-            raise HTTPException(422, {"error": "Not a valid torrent"})
+            raise UnprocessableEntity("Not a valid torrent")
         return values
 
 
@@ -97,5 +96,5 @@ class GetRoomWatchingSchema(GetRoomSchema):
             name=room_info.name,
             video=room_info.video_source.get_player_src(),
             files=room_info.get_available_files(),
-            curr_fi=room_info.video_source.fi
+            curr_fi=room_info.video_source.fi,
         )

@@ -5,6 +5,7 @@ from uuid import UUID, uuid1
 
 import anyio
 from fastapi import Depends, FastAPI, Form, Path, Request, WebSocket
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from jinja2 import Environment, FileSystemLoader
@@ -12,6 +13,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, get_session
+from exceptions import HTTPException
 from models.room_model import RoomModel
 from room_info import get_room, monitor_rooms
 from schemas.room_schemas import (CreateRoomLinkSchema,
@@ -26,6 +28,29 @@ app.add_event_handler("startup", monitor_rooms)
 app.mount("/static", StaticFiles(directory="static"))
 
 logger = logging.getLogger(__name__)
+
+
+@app.exception_handler(HTTPException)
+def handle_http_json_exception(_: Request, exc: HTTPException):
+    if exc.html:
+        return HTMLResponse(
+            env.get_template("exception.html").render(
+                title=exc.__class__.__name__, error=exc.msg
+            ),
+            status_code=exc.status_code,
+        )
+    return JSONResponse({"detail": exc.msg}, exc.status_code)
+
+
+@app.exception_handler(RequestValidationError)
+def handle_validation_error(_: Request, exc: RequestValidationError):
+    return HTMLResponse(
+        env.get_template("exception.html").render(
+            title=exc.__class__.__name__,
+            error=f"Something bad happened. Pls don't cry.<br> Error: {exc.args}"
+        ),
+        status_code=422,
+    )
 
 
 env = Environment(

@@ -2,11 +2,11 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid1
 
-from fastapi import HTTPException
 from sqlalchemy import String, Uuid, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
+from exceptions import BadRequest, NotFound
 from models.base import BaseModel
 from video_sources import HttpLinkVideoSource, TorrentVideoSource, VideoSource
 
@@ -48,7 +48,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         stmt = select(RoomModel).where(RoomModel.room_id == room_id)
         result = (await session.execute(stmt)).first()
         if not result:
-            raise HTTPException(404, {"error": "Room not found!"})
+            raise NotFound("Room not found!")
         return result[0]
 
     @classmethod
@@ -56,7 +56,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         stmt = select(RoomModel).where(RoomModel.name == name)
         result = (await session.execute(stmt)).first()
         if not result:
-            raise HTTPException(404, {"error": "Room not found!"})
+            raise NotFound("Room not found!")
         return result[0]
 
     @classmethod
@@ -95,9 +95,9 @@ class RoomModel(MappedAsDataclass, BaseModel):
         cls, session: AsyncSession, name: str, vs_cls: type[VideoSource], vs_data: str
     ) -> "RoomModel":
         if vs_cls not in source_to_enum:
-            raise HTTPException(404, {"error": f"Video source not found: {vs_cls}"})
+            raise NotFound("Video source not found: {vs_cls}")
         if await cls.exists_with_name(session, name):
-            raise HTTPException(422, {"error": "Room with same name already exists!"})
+            raise BadRequest("Room with same name already exists!")
         rm = RoomModel(
             name=name, video_source=source_to_enum[vs_cls], video_source_data=vs_data
         )
