@@ -1,3 +1,4 @@
 {
-exclude: ["venv", "stubs"]	
+        "venv": "venv",
+        "typeCheckingMode": "standard"
 }
