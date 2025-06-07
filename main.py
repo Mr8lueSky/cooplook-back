@@ -13,7 +13,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, get_session
 from models.room_model import RoomModel
-from room_info import get_room
+from room_info import get_room, monitor_rooms
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema)
@@ -21,6 +21,7 @@ from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
 app.add_event_handler("startup", create_all)
+app.add_event_handler("startup", monitor_rooms)
 
 app.mount("/static", StaticFiles(directory="static"))
 

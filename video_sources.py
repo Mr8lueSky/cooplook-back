@@ -26,6 +26,8 @@ class VideoSource(abc.ABC):
     def set_current_fi(self, fi: int) -> bool: ...
 
     def start(self): ...
+    
+    def cleanup(self): ...
 
     @abc.abstractmethod
     def cancel_current_requests(self): ...
@@ -77,6 +79,10 @@ class TorrentVideoSource(VideoSource):
         self.fi = fi
         self.tm.initiate_torrent_download()
         return True
+    
+    def cleanup(self):
+        print("Cleanup called")
+        self.tm.cleanup()
 
     def start(self):
         os.makedirs(self.save_path, exist_ok=True)

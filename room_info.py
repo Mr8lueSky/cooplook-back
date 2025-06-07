@@ -10,13 +10,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.websockets import WebSocketDisconnect
 
 from cmds import Commands, VideoStatus
+from config import ROOM_INACTIVITY_PERIOD
 from engine import async_session_maker
 from logger import Logging
 from models.room_model import RoomModel, enum_to_source
 from video_sources import VideoSource
 
 MOE = 1
-rooms = {}
+rooms: dict[UUID, 'RoomInfo'] = {}
 lock = Lock()
 
 
@@ -32,14 +33,8 @@ class RoomInfo(Logging):
     status: VideoStatus = VideoStatus.PAUSE
     last_change: float = field(default_factory=time)
     suspend_by: set[int] = field(default_factory=set)
+    last_leave_ts: float = field(default_factory=time)
 
-    def for_temp(self):
-        return {
-            "room_id": self.room_id,
-            "video": self.video_source.get_player_src(),
-            "room_name": self.name,
-        }
-    
     @classmethod
     def from_model(cls, model: RoomModel) -> "RoomInfo":
         vs_cls: type[VideoSource] = enum_to_source[model.video_source]
@@ -51,7 +46,7 @@ class RoomInfo(Logging):
         )
         r.video_source.start()
         return r
-    
+
     async def set_new_file(self, new_fi: int) -> bool:
         if not self.video_source.set_current_fi(new_fi):
             return False
@@ -151,6 +146,7 @@ class RoomInfo(Logging):
             await self.handle_susp_unsusp(Commands.UNSUSPEND, self.current_time, ws_id)
         await self.handle_play_pause(Commands.PAUSE, -1)
         await self.send_room(Commands.people_count_cmd(len(self.wss)))
+        self.last_leave_ts = time()
 
     async def handle_client(self, websocket: WebSocket):
         ws_id = self.last_ws_id
@@ -187,6 +183,10 @@ class RoomInfo(Logging):
         await self.handle_susp_unsusp(Commands.SUSPEND, self.current_time, ws_id)
         await self.send_room(Commands.people_count_cmd(len(self.wss)), -1)
 
+    async def cleanup(self):
+        self.video_source.cancel_current_requests()
+        self.video_source.cleanup()
+
 
 async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
     async with lock:
@@ -194,3 +194,25 @@ async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
             room_model = await RoomModel.get_room_id(session, room_id)
             rooms[room_id] = RoomInfo.from_model(room_model)
     return rooms[room_id]
+
+
+async def _monitor_rooms():
+    while True:
+        await asyncio.sleep(ROOM_INACTIVITY_PERIOD)
+        print("Starting clean up of the rooms")
+        for room_id, room in tuple(rooms.items()):
+            async with lock:
+                if (
+                    len(room.wss)
+                    or time() - room.last_leave_ts < ROOM_INACTIVITY_PERIOD
+                ):
+                    continue
+                room = rooms.pop(room_id)
+            await room.cleanup()
+            print(f"{room_id} is cleaned")
+            await asyncio.sleep(0)
+        print("Cleanup ended")
+
+async def monitor_rooms():
+    asyncio.create_task(_monitor_rooms())
+
