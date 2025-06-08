@@ -20,5 +20,3 @@ class UnprocessableEntity(HTTPException):
 class ContentTooLarge(HTTPException):
     status_code = 413
 
-
-
