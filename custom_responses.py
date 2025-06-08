@@ -173,6 +173,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         self.stop = False
         self.request = request
         self.tasks: list[Task] = []
+        self.headers.setdefault("cache-control", "no-store")
 
     def cancel(self):
         for task in self.tasks:

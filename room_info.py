@@ -1,5 +1,5 @@
 import asyncio
-from asyncio import Lock, wait_for
+from asyncio import Lock
 from dataclasses import dataclass, field
 from time import time
 from traceback import format_exception
@@ -21,13 +21,21 @@ rooms: dict[UUID, "RoomInfo"] = {}
 lock = Lock()
 monitor_logger = create_logger("RoomMonitor")
 
+cmd_data_prepare = {
+    Commands.PAUSE: float,
+    Commands.PLAY: float,
+    Commands.SUSPEND: float,
+    Commands.UNSUSPEND: float,
+    Commands.CHANGE_FILE: int,
+}
+
 
 @dataclass
 class RoomInfo(Logging):
     video_source: VideoSource
     name: str
     room_id: UUID
-    prev_status: VideoStatus = VideoStatus.PAUSE
+    unsuspend_to: VideoStatus = VideoStatus.PLAY
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
     _current_time: float = 0
@@ -48,13 +56,14 @@ class RoomInfo(Logging):
         r.video_source.start()
         return r
 
-    async def handle_set_new_file(self, new_fi_str: str, ws_id: int) -> bool:
-        new_fi = int(new_fi_str)
+    async def handle_set_new_file(self, new_fi: int, ws_id: int) -> bool:
         if not self.video_source.set_current_fi(new_fi):
             return False
         await self.send_room(Commands.change_file_cmd(new_fi), ws_id)
-        await self.handle_play_pause(Commands.PAUSE, '0', -1)
-        asyncio.gather(*(self.initial(ws, ws_id) for ws_id, ws in self.wss.items()))
+        await self.handle_play_pause(Commands.PAUSE, 0, -1)
+        asyncio.gather(
+            *(self.initialize_user(ws, ws_id) for ws_id, ws in self.wss.items())
+        )
         return True
 
     def get_available_files(self):
@@ -73,46 +82,49 @@ class RoomInfo(Logging):
             *(self.send_to(msg, ws_id) for ws_id in self.wss.keys() if ws_id != by)
         )
 
-    async def change_status(self, new_status: VideoStatus, ts_str: str, by: int):
+    async def change_status(self, new_status: VideoStatus, ts: float, by: int):
         self.logger.info(f"Changing status to {new_status}")
-        self._current_time = float(ts_str) 
-        self.prev_status = self.status
-        self.status = new_status
+        self.current_time = ts
         self.last_change = time()
-        await self.send_current_status(by)
+
+        if abs(self.current_time - ts) > MOE:
+            self.status = VideoStatus.SUSPEND
+            await self.send_current_status(-1)
+        else:
+            self.status = new_status
+            await self.send_current_status(by)
 
     async def send_current_status(self, by: int):
         await self.send_room(f"{self.status.value} {self.current_time}", by)
 
-    async def handle_play_pause(self, cmd: Commands, ts_str: str, by: int):
+    async def handle_play_pause(self, cmd: Commands, ts: float, by: int):
         if self.status == VideoStatus.SUSPEND:
             return
-        ts = float(ts_str)
-        if abs(ts - self.current_time) > MOE:
-            self.current_time = ts
-        await self.change_status(VideoStatus(cmd), ts_str, by)
+        await self.change_status(VideoStatus(cmd), ts, by)
 
-    async def handle_susp_unsusp(self, cmd: Commands, ts_str: str, by: int):
+    async def handle_susp_unsusp(self, cmd: Commands, ts: float, by: int):
         if cmd == Commands.SUSPEND:
             self.suspend_by.add(by)
             if not self.status == VideoStatus.SUSPEND:
-                await self.change_status(VideoStatus.SUSPEND, ts_str, -1)
+                await self.change_status(VideoStatus.SUSPEND, ts, -1)
 
         if cmd == Commands.UNSUSPEND and by in self.suspend_by:
             self.suspend_by.remove(by)
 
         if not self.suspend_by and self.status == VideoStatus.SUSPEND:
             await self.send_room(Commands.unsuspend_cmd(self.current_time))
-            await self.change_status(self.prev_status, ts_str, -1)
+            await self.change_status(self.unsuspend_to, ts, -1)
+            self.unsuspend_to = VideoStatus.PLAY
 
-    async def suspend_by_all(self, ts_str: str):
+    async def suspend_by_all(self, ts: float):
         for i in self.wss.keys():
-            await self.handle_susp_unsusp(Commands.SUSPEND, ts_str, i)
+            await self.handle_susp_unsusp(Commands.SUSPEND, ts, i)
 
     async def handle_cmd(self, data: str, ws_id: int):
         self.logger.debug(f"Rc: {ws_id}, {data}")
         cmd, arg = data.split(" ")
         cmd = Commands(cmd)
+        arg = cmd_data_prepare.get(cmd, str)(arg)
         if cmd == Commands.PLAY or cmd == Commands.PAUSE:
             await self.handle_play_pause(cmd, arg, ws_id)
         elif cmd == Commands.SUSPEND or cmd == Commands.UNSUSPEND:
@@ -128,9 +140,9 @@ class RoomInfo(Logging):
         self.wss.pop(ws_id, None)
         if ws_id in self.suspend_by:
             await self.handle_susp_unsusp(
-                Commands.UNSUSPEND, str(self.current_time), ws_id
+                Commands.UNSUSPEND, self.current_time, ws_id
             )
-        await self.handle_play_pause(Commands.PAUSE, str(self.current_time), -1)
+        await self.handle_play_pause(Commands.PAUSE, self.current_time, -1)
         await self.send_room(Commands.people_count_cmd(len(self.wss)))
         self.last_leave_ts = time()
 
@@ -138,7 +150,7 @@ class RoomInfo(Logging):
         ws_id = self.last_ws_id
         self.last_ws_id += 1
         try:
-            await self.initial(websocket, ws_id)
+            await self.initialize_user(websocket, ws_id)
             self.logger.info(f"Client {ws_id} connected")
             while True:
                 data = await websocket.receive_text()
@@ -161,11 +173,11 @@ class RoomInfo(Logging):
         self._current_time = ts
         self.last_change = time()
 
-    async def initial(self, ws: WebSocket, ws_id: int):
+    async def initialize_user(self, ws: WebSocket, ws_id: int):
         self.wss[ws_id] = ws
         await ws.accept()
-        self.prev_status = VideoStatus.PAUSE
-        await self.handle_susp_unsusp(Commands.SUSPEND, str(self.current_time), ws_id)
+        self.unsuspend_to = VideoStatus.PAUSE
+        await self.handle_susp_unsusp(Commands.SUSPEND, self.current_time, ws_id)
         await self.send_room(Commands.people_count_cmd(len(self.wss)), -1)
 
     async def cleanup(self):
@@ -202,7 +214,6 @@ async def _monitor_rooms():
             monitor_logger.debug(f"Cleaned room {room_id}")
             await asyncio.sleep(0)
         monitor_logger.info("Room cleanup finished")
-
 
 async def monitor_rooms():
     asyncio.create_task(_monitor_rooms())

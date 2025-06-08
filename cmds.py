@@ -6,10 +6,8 @@ class Commands(str, Enum):
     PAUSE = "pa"
     SUSPEND = "sp"
     UNSUSPEND = "up"
-    PING = "pi"
     SET_CT = "sc"
     PEOPLE_COUNT = "pc"
-    RELOAD = "rl"
     CHANGE_FILE = "cf"
 
     @classmethod

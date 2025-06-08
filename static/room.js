@@ -10,10 +10,12 @@ const CHANGE_FILE = "cf"
 
 let suspend = false;
 let initial = true;
+let waiting = true;
 let last_ts = 0;
 
 let ignorePlay = 0;
 let ignorePause = 0;
+let ignoreWaiting = 0;
 
 let videoElem = document.getElementById("video");
 videoElem.muted = true;
@@ -33,34 +35,37 @@ let cmdToStatus = {
         [PLAY]: "PLAY",
         [PAUSE]: "PAUSE",
         [SUSPEND]: "SUSPEND",
+        [UNSUSPEND]: "UNSUSPEND"
 };
 
 let showOnOpen = [selectFileElem, videoElem];
 
+
+
+let setCurrTime = (currentTime) => {
+	if (!waiting) ignoreWaiting += 1;;
+	console.log(`Setting current time: ${ignoreWaiting}`)
+        videoElem.currentTime = currentTime
+}
+
 function reloadVideo() {
         videoElem.load();
-	videoElem.currentTime = 0;
-        // ws.close()
-        // ws = createSocket()
-	// window.location.reload()
+        videoElem.currentTime = 0;
 }
-let selectFile = (event) => {
+
+
+let selectFile = () => {
         let newFile = selectFileElem.value;
         console.log(`Selecting file ${newFile}!`)
-	sendCommand(CHANGE_FILE,newFile)
-	reloadVideo()
+        sendCommand(CHANGE_FILE, newFile)
+        reloadVideo()
 }
 
 
 
-function setStatus(newStatus) {
+function setStatus(newStatus, send = false) {
         if (!(newStatus in cmdToStatus)) {
                 console.log(`Status doesn't exist: ${newStatus}`);
-                return;
-        }
-        if (newStatus === UNSUSPEND) {
-                console.log("Unsuspending");
-                currentStatus = "";
                 return;
         }
         if (newStatus === currentStatus) return;
@@ -71,9 +76,11 @@ function setStatus(newStatus) {
 
         if (newStatus === SUSPEND) alertElem.textContent = "Waiting to load...";
         else alertElem.textContent = "";
-
         currentStatusElem.textContent = cmdToStatus[newStatus];
         currentStatus = newStatus;
+        if (send) {
+                sendCommand(newStatus, videoElem.currentTime)
+        }
 }
 
 setStatus(SUSPEND);
@@ -108,9 +115,8 @@ videoElem.addEventListener("play", async () => {
                 console.log(`Skipping play, left ${ignorePlay}`)
                 return;
         }
-        sendCommand(PLAY, videoElem.currentTime)
-        setStatus(PLAY);
         console.log("Play event")
+        setStatus(PLAY, true);
 })
 
 videoElem.addEventListener("pause", async () => {
@@ -119,9 +125,8 @@ videoElem.addEventListener("pause", async () => {
                 console.log(`Skipping pause, left ${ignorePause}`)
                 return;
         }
-        sendCommand(PAUSE, videoElem.currentTime)
-        setStatus(PAUSE);
         console.log("Pause event")
+        setStatus(PAUSE, true);
 })
 
 
@@ -133,40 +138,35 @@ let createSocket = () => {
                 let [cmd, arg] = message.data.split(' ')
                 arg = parseFloat(arg)
                 console.log(`Command rc: ${cmd}, current time: ${arg}`)
-                if (cmd == SET_CT) {
-                        videoElem.currentTime = arg;
-                        last_ts = arg;
-                } else if (cmd == PLAY) {
+                if (cmd == PLAY) {
                         console.log("PLAY FROM SERVER")
                         setStatus(PLAY);
-                        videoElem.currentTime = arg;
                         await play_video()
                 } else if (cmd == PAUSE) {
                         setStatus(PAUSE);
                         console.log("PAUSE FROM SERVER")
-                        videoElem.currentTime = arg;
                         await pause_video()
                 } else if (cmd == SUSPEND) {
                         console.log("SUSPEND")
+                        suspend = true;
                         setStatus(SUSPEND);
                         await pause_video()
                         suspend = true;
-                } else if (cmd == UNSUSPEND) {
-                        console.log("UNSUSPEND")
+                } else if (cmd === UNSUSPEND) {
                         suspend = false;
+                        console.log("UNSUSPEND");
+                        return;
                 } else if (cmd == PEOPLE_COUNT) {
                         peopleCountElem.textContent = arg;
                         return;
-                } else if (cmd == RELOAD) {
-                        window.location.reload();
-                        return;
                 } else if (cmd == CHANGE_FILE) {
-			reloadVideo();
-			selectFileElem.selectedIndex = arg;
-			return;
-		}
+                        reloadVideo();
+                        selectFileElem.selectedIndex = arg;
+                        return;
+                }
+                setCurrTime(arg)
 
-                videoElem.currentTime = arg;
+
         }
         websocket.onclose = async () => {
                 console.log("Socket closed.")
@@ -197,27 +197,28 @@ let sendCommand = (cmd, data) => {
 
 
 videoElem.addEventListener("playing", () => {
-        console.log("Playing!")
-        sendCommand(UNSUSPEND, videoElem.currentTime)
+        // console.log("Set status PLAY from playing event")
+        // setStatus(PLAY, send = true)
 })
 
-videoElem.addEventListener("canplay", () => {
-        console.log("can play!")
-        sendCommand(UNSUSPEND, videoElem.currentTime)
+videoElem.addEventListener("waiting", () => {
+	waiting = true;
+        if (ignoreWaiting) {
+		console.log(`Ignore waiting! Left: ${ignoreWaiting}`)
+                ignoreWaiting -= 1;
+                return;
+        }
+        console.log("Set status SUSPEND from waiting event")
+        setStatus(SUSPEND, send = true)
 })
+
 videoElem.addEventListener("canplaythrough", () => {
-        console.log("can play!")
+	waiting = false;
+        console.log("Set status UNSUSPEND from canplaythrough event")
         sendCommand(UNSUSPEND, videoElem.currentTime)
 })
 
-fsButton.addEventListener("click", () => {
-        console.log("Force suspend!")
-        sendCommand(SUSPEND, videoElem.currentTime)
-        suspend = true;
-})
-
-videoElem.addEventListener("error", () => {
-})
+videoElem.addEventListener("error", () => {})
 
 if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" ||
                 navigator.getAutoplayPolicy(videoElem) === "disallowed")) {
