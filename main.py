@@ -15,12 +15,14 @@ from auth import current_user, generate_token
 from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
+import exceptions
 from models.room_model import RoomModel
 from room_info import get_room, monitor_rooms
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema)
 from schemas.user_schema import CreateUserSchema, GetUserSchema
+from templates import get_template_response
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
@@ -33,7 +35,7 @@ logger = logging.getLogger(__name__)
 
 
 @app.exception_handler(HTTPException)
-def handle_http_json_exception(_: Request, exc: HTTPException):
+def handle_http_exception(_: Request, exc: HTTPException):
     if exc.html:
         return HTMLResponse(
             env.get_template("exception.html").render(
@@ -159,17 +161,21 @@ async def list_rooms(_: GetUserSchema = Depends(current_user)) -> HTMLResponse:
         )
 
 
-@app.get("/login/")
+@app.get("/login")
 async def login_page():
     return HTMLResponse(env.get_template("login.html").render())
 
 
-@app.post("/login/")
+@app.post("/login")
 async def login(user: Annotated[CreateUserSchema, Form()]):
     async with async_session_maker.begin() as session:
-        token = await generate_token(session, user.name, user.password)
-        resp = RedirectResponse("/rooms/", 303)
-        resp.set_cookie("token", token, httponly=True)
+        try:
+            token = await generate_token(session, user.name, user.password)
+            resp = RedirectResponse("/rooms/", 303)
+            resp.set_cookie("token", token, httponly=True)
+        except HTTPException as exc:
+            exc.msg = "Incorrent username or password!"
+            return get_template_response("login", exceptions=[exc])
     return resp
 
 
@@ -201,6 +207,7 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
+
 
 @app.get("/")
 async def index() -> RedirectResponse:

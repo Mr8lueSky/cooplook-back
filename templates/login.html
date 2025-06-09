@@ -8,6 +8,9 @@
 </head>
 
 <body>
+	{% for exc in exceptions %}
+	<h4 class="alert-{{ exc.severity.value }}">{{ exc.msg }}</h4>
+	{% endfor %}
         <form action="/login" method="POST">
                 <p>Login:</p><input type="text" name="name" value="">
                 <p>Password:</p><input type="password" name="password" value="">

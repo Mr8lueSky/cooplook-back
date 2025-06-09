@@ -9,6 +9,9 @@
 </head>
 
 <body>
+	{% for exc in exceptions %}
+	<h4 class="alert-{{ exc.severity.value }}">{{ exc.msg }}</h4>
+	{% endfor %}
         <h3>List of rooms:</h3>
         <ul id="room-list">
                 {% for room in rooms %}
@@ -18,7 +21,7 @@
 	<h3 id="alerts"></h3>
         <div id="room-create">
                 <h3>Create room:</h3>
-		<select id="video-from">
+		<select id="video-from" autocomplete="off">
 			<option id="link" value="from-link">From a link</option>
 			<option id="torrent" value="from-torrent">From torrent</option>
 		</select>

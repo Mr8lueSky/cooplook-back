@@ -13,6 +13,9 @@
 </head>
 
 <body>
+	{% for exc in exceptions %}
+	<h4 class="alert-{{ exc.severity.value }}">{{ exc.msg }}</h4>
+	{% endfor %}
         <h3>You are in a {{ room.name }} room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>

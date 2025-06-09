@@ -41,9 +41,8 @@ let validateRoomName = (roomName) => {
 }
 
 let selectSource = () => {
-        console.log("Selecting source!")
+        console.log(`Selecting source ${selectSourceElem.value}!`)
         for (const [key, value] of Object.entries(sourcesToElements)) {
-                console.log(key, value)
                 if (key === selectSourceElem.value) value.hidden = false;
                 else value.hidden = true;
         }
@@ -92,7 +91,9 @@ let onCreateRoomBtClick = async () => {
         }
 }
 
-selectSource()
+window.onload = function() {
+        selectSource()
+}
 
 selectSourceElem.addEventListener("change", selectSource)
 createRoomBt.addEventListener("click", onCreateRoomBtClick)
