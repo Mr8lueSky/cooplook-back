@@ -9,38 +9,36 @@
 </head>
 
 <body>
-	{% for exc in exceptions %}
-	<h4 class="alert-{{ exc.severity.value }}">{{ exc.msg }}</h4>
-	{% endfor %}
-        <h3>List of rooms:</h3>
+        <div id="alerts"></div>
+	<h3>List of rooms:</h3>
         <ul id="room-list">
                 {% for room in rooms %}
                 <li><a href="/rooms/{{ room.room_id }}">{{ room.name }}</a></li>
                 {% endfor %}
         </ul>
-	<h3 id="alerts"></h3>
         <div id="room-create">
-                <h3>Create room:</h3>
-		<select id="video-from" autocomplete="off">
-			<option id="link" value="from-link">From a link</option>
-			<option id="torrent" value="from-torrent">From torrent</option>
-		</select>
-		<input id="room-name" type="text" name="room-name" placeholder="Room name">
-		<div id="from-link">
-			<input id="video-link" name="link" placeholder="Link to a video">
+                <form id="create-form" method="POST" action="/rooms/from_link" enctype="multipart/form-data">
+                        <h3>Create room:</h3>
+                        <select id="video-from" autocomplete="off">
+                                <option id="link" value="from-link">From a link</option>
+                                <option id="torrent" value="from-torrent">From torrent</option>
+                        </select>
+                        <input id="room-name" type="text" name="name" placeholder="Room name">
+                        <div id="from-link">
+                                <input id="video-link" name="link" placeholder="Link to a video">
 
-		</div>
+                        </div>
 
-		<div id="from-torrent">
+                        <div id="from-torrent">
+                                <input type="file" name="torrent_file">
+                        </div>
+                        <input id="create-room" type="submit" value="Submit">
 
 
-			<input id="torrent-file" type="file" name="torrent-file" value="torrent-file">
-		</div>
-		<input id="create-room" type="submit" value="Submit">
-
+                </form>
         </div>
-        <script src="/static/rooms.js">
-        </script>
+        <script src="/static/rooms.js"></script>
+        <script src="/static/alerts.js"></script>
 </body>
 
 </html>

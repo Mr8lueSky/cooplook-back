@@ -12,7 +12,7 @@ let createRoomBt = document.getElementById("create-room")
 let roomNameElm = document.getElementById("room-name")
 let torrentFileElm = document.getElementById("torrent-file")
 let linkElm = document.getElementById("video-link")
-let alertsElm = document.getElementById("alerts")
+let formElm = document.getElementById("create-form")
 
 let sourcesToElements = {
         [FROM_LINK]: createFromLinkElem,
@@ -26,13 +26,6 @@ let sourcesToLinks = {
 
 let allowedChrRe = new RegExp("[a-zA-Z ,./|\\?!:0-9]*");
 
-let showAlert = (msg) => {
-        alertsElm.textContent = msg
-}
-
-let clearAlert = () => {
-        alertsElm.textContent = ""
-}
 
 let validateRoomName = (roomName) => {
         let matchRes = roomName.match(allowedChrRe);
@@ -43,57 +36,21 @@ let validateRoomName = (roomName) => {
 let selectSource = () => {
         console.log(`Selecting source ${selectSourceElem.value}!`)
         for (const [key, value] of Object.entries(sourcesToElements)) {
-                if (key === selectSourceElem.value) value.hidden = false;
-                else value.hidden = true;
+                if (key === selectSourceElem.value) {
+                        value.hidden = false;
+                        formElm.action = sourcesToLinks[key]
+                } else value.hidden = true;
         }
 }
 
-let onCreateRoomBtClick = async () => {
-        clearAlert();
-        let roomName = roomNameElm.value;
-        if (!validateRoomName(roomName)) {
-                showAlert("Length of a name should be between 4 and 32. Also don't use any special characters!");
-                return;
-        }
-
-        let videoSource = selectSourceElem.value;
-        let url = sourcesToLinks[videoSource];
-        let data = new FormData();
-        data.append("name", roomName)
-        if (videoSource === FROM_LINK) {
-                if (linkElm.value.length < 4) {
-                        showAlert("Link must be at least 4 characters long")
-                        return;
-                }
-                data.append("link", linkElm.value)
-        } else if (videoSource === FROM_TORRENT) {
-                if (torrentFileElm.files.length < 1) {
-                        showAlert("Upload torrent file first")
-                }
-                data.append("torrent_file", torrentFileElm.files[0])
-        }
-        try {
-                const resp = await fetch(url, {
-                        method: "POST",
-                        body: data,
-                })
-
-                const respJson = await resp.json();
-                if (!resp.ok) {
-                        showAlert(JSON.stringify(respJson))
-                        return;
-                }
-                document.location.pathname = `/rooms/${respJson['room_id']}`
-
-        } catch (exc) {
-                showAlert(exc);
-                return
-        }
-}
 
 window.onload = function() {
         selectSource()
 }
 
+formElm.onsubmit = (event) => {
+        console.log(event.formData)
+        event.cancel()
+}
+
 selectSourceElem.addEventListener("change", selectSource)
-createRoomBt.addEventListener("click", onCreateRoomBtClick)

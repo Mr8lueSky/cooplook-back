@@ -13,10 +13,8 @@
 </head>
 
 <body>
-	{% for exc in exceptions %}
-	<h4 class="alert-{{ exc.severity.value }}">{{ exc.msg }}</h4>
-	{% endfor %}
-        <h3>You are in a {{ room.name }} room!</h3>
+	<div id="alerts"></div>
+	<h3>You are in a {{ room.name }} room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>
         <div id="video-wrapper">
@@ -40,6 +38,7 @@
 	{% endfor %}
 	</select>
         <script src="/static/room.js"></script>
+        <script src="/static/alerts.js"></script>
 </body>
 
 </html>

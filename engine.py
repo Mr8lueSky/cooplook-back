@@ -6,7 +6,7 @@ from config import DB_URL, ENV
 from logger import Logging
 from models.base import BaseModel
 from models.user_model import UserModel
-from schemas.user_schema import CreateUserSchema
+from schemas.user_schema import LoginUserSchema
 
 engine = create_async_engine(DB_URL, echo=False)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -30,7 +30,7 @@ async def get_session():
 async def create_users():
     if ENV == "DEV":
         async with async_session_maker.begin() as ses:
-            user = CreateUserSchema(name="admin", password="12345678")
+            user = LoginUserSchema(name="admin", password="12345678")
             await UserModel.create(
                 ses,
                 user.name,

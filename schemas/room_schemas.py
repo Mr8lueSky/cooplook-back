@@ -49,7 +49,6 @@ class FileSizeValidator:
 class CreateRoomLinkSchema(BaseSchema):
     name: str = RoomNameField
     link: str = LinkField
-    model_config = {"extra": "forbid"}
 
 
 class CreateRoomTorrentSchema(BaseSchema):

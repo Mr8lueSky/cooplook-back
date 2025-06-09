@@ -14,6 +14,7 @@ def get_template_response(
     name: str, data: dict[str, Any] | None = None, exceptions: list[HTTPException] | None = None
 ):
     data = data or {}
+    exceptions = exceptions or []
     return HTMLResponse(
         env.get_template(f"{name}.html").render(**data, exceptions=exceptions)
     )

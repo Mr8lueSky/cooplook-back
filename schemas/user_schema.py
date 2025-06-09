@@ -6,14 +6,14 @@ from config import PW_SECRET_KET
 from schemas.base_schema import BaseSchema
 
 UsernameField = Field(min_length=3, max_length=31, pattern=r"[a-zA-Z ,./|\\?!:0-9]*")
-PasswordField = Field(min_length=8, max_length=64)
+PasswordField = Field(max_length=64)
 
 
 class GetUserSchema(BaseSchema):
     name: str = UsernameField
 
 
-class CreateUserSchema(GetUserSchema):
+class LoginUserSchema(GetUserSchema):
     password: str = PasswordField
     salt: bytes = Field(
         init=False,
