@@ -8,7 +8,6 @@ from fastapi import Depends, FastAPI, Form, Path, Request, Response, WebSocket
 from fastapi.exceptions import RequestValidationError
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
-from jinja2 import Environment, FileSystemLoader
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from auth import current_user, generate_token
@@ -21,7 +20,7 @@ from schemas.room_schemas import (CreateRoomLinkSchema, CreateRoomSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema)
 from schemas.user_schema import GetUserSchema, LoginUserSchema
-from templates import get_template_response
+from templates import get_template, get_template_response
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
@@ -35,8 +34,6 @@ app.mount("/static", StaticFiles(directory="static"))
 logger = logging.getLogger(__name__)
 
 alert_allowed = r"[a-zA-Z0-9:.]"
-
-# def format_message(msg: str):
 
 
 @app.exception_handler(HTTPException)
@@ -65,12 +62,6 @@ def handle_validation_error(r: Request, exc: RequestValidationError):
     exceptions.extend(".".join(err["loc"]) + ": " + err["msg"] for err in exc.errors())
     resp.set_cookie("exc", json.dumps(exceptions))
     return resp
-
-
-env = Environment(
-    loader=FileSystemLoader(searchpath="templates"),
-)
-ROOM_TEMPLATE = env.get_template("room.html")
 
 
 if ENV == "DEV":
@@ -213,7 +204,7 @@ async def list_rooms_end(
 
 @app.get("/login")
 async def login_page():
-    return HTMLResponse(env.get_template("login.html").render())
+    return get_template("login")
 
 
 @app.post("/login")
@@ -256,7 +247,6 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
-
 
 @app.get("/")
 async def index() -> RedirectResponse:
