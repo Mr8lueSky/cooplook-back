@@ -1,5 +1,7 @@
 import json
 import logging
+from collections import defaultdict
+from string import ascii_lowercase, ascii_uppercase
 from typing import Annotated
 from uuid import UUID, uuid1
 
@@ -18,9 +20,10 @@ from models.room_model import RoomModel
 from room_info import get_room, monitor_rooms, take_room
 from schemas.room_schemas import (CreateRoomLinkSchema, CreateRoomSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
-                                  GetRoomWatchingSchema)
+                                  GetRoomWatchingSchema, UpdateSourceToLink,
+                                  UpdateSourceToTorrentSchema)
 from schemas.user_schema import GetUserSchema, LoginUserSchema
-from templates import get_template, get_template_response
+from templates import get_template_response
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
@@ -33,7 +36,14 @@ app.mount("/static", StaticFiles(directory="static"))
 
 logger = logging.getLogger(__name__)
 
-alert_allowed = r"[a-zA-Z0-9:.]"
+allowed_alert_table = defaultdict(lambda: ord("|"))
+
+for char in ascii_lowercase + ascii_uppercase + " :-._[]":
+    allowed_alert_table[ord(char)] = ord(char)
+
+
+def format_exc_msg(msg: str):
+    return msg.translate(allowed_alert_table).replace("|", "")
 
 
 @app.exception_handler(HTTPException)
@@ -44,7 +54,7 @@ def handle_http_exception(r: Request, exc: HTTPException):
             exceptions = json.loads(r.cookies.get("exc", "[]"))
         except Exception:
             exceptions = []
-        exceptions.append(exc.msg)
+        exceptions.append(format_exc_msg(exc.msg))
         resp.set_cookie("exc", json.dumps(exceptions))
         return resp
     return JSONResponse(
@@ -59,7 +69,9 @@ def handle_validation_error(r: Request, exc: RequestValidationError):
         exceptions = json.loads(r.cookies.get("exc", "[]"))
     except Exception:
         exceptions = []
-    exceptions.extend(".".join(err["loc"]) + ": " + err["msg"] for err in exc.errors())
+    exceptions.extend(
+        format_exc_msg(".".join(err["loc"]) + ": " + err["msg"]) for err in exc.errors()
+    )
     resp.set_cookie("exc", json.dumps(exceptions))
     return resp
 
@@ -105,7 +117,7 @@ if ENV == "DEV":
 
 
 @app.post("/rooms/from_link")
-async def create_room_from_link(
+async def create_room_link(
     room: Annotated[CreateRoomLinkSchema, Form()],
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
@@ -163,6 +175,48 @@ async def update_room(
     return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
+@app.post("/rooms/{room_id}/vs_torrent")
+async def update_source_to_torrent(
+    room_id: UUID,
+    torrent: UpdateSourceToTorrentSchema = Form(),
+    _: GetUserSchema = Depends(current_user),
+):
+    torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
+    async with await anyio.open_file(torrent_fpth, mode="wb") as file:
+        await file.write(torrent.file_content)
+
+    async with async_session_maker.begin() as session:
+        await RoomModel.update(
+            session,
+            room_id,
+            last_watch_ts=0,
+            last_file_ind=0,
+            vs_cls=TorrentVideoSource,
+            video_source_data=torrent_fpth.as_posix(),
+        )
+        await take_room(session, room_id)
+        return RedirectResponse(f"/rooms/{room_id}", 303)
+
+
+@app.post("/rooms/{room_id}/vs_link")
+async def update_source_to_link(
+    room_id: UUID,
+    link: UpdateSourceToLink = Form(),
+    _: GetUserSchema = Depends(current_user),
+) -> Response:
+    async with async_session_maker.begin() as session:
+        await RoomModel.update(
+            session,
+            room_id,
+            last_watch_ts=0,
+            last_file_ind=0,
+            vs_cls=HttpLinkVideoSource,
+            video_source_data=link.video_link,
+        )
+        await take_room(session, room_id)
+        return RedirectResponse(f"/rooms/{room_id}", 303)
+
+
 @app.get("/rooms/{room_id}")
 async def inside_room(
     room_id: UUID,
@@ -204,7 +258,7 @@ async def list_rooms_end(
 
 @app.get("/login")
 async def login_page():
-    return get_template("login")
+    return get_template_response("login")
 
 
 @app.post("/login")
@@ -247,6 +301,7 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
+
 
 @app.get("/")
 async def index() -> RedirectResponse:

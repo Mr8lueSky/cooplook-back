@@ -7,6 +7,13 @@ const UNSUSPEND = "up"
 const FORCE_UNSUSPEND = "fu"
 const RELOAD = "rl"
 const CHANGE_FILE = "cf"
+let FROM_LINK_URL = `/rooms/${room_id}/vs_link`;
+let FROM_TORRENT_URL = `/rooms/${room_id}/vs_torrent`;
+
+let sourcesToLinks = {
+        [FROM_LINK]: FROM_LINK_URL,
+        [FROM_TORRENT]: FROM_TORRENT_URL
+}
 
 let suspend = false;
 let initial = true;
@@ -33,6 +40,8 @@ let videoContainer = document.getElementById("video-wrapper")
 
 let currentStatus = "";
 
+
+
 let cmdToStatus = {
         [PLAY]: "PLAY",
         [PAUSE]: "PAUSE",
@@ -51,6 +60,7 @@ let setCurrTime = (currentTime) => {
 }
 
 function reloadVideo() {
+	console.log("Reloading video!")
         videoElem.load();
         videoElem.currentTime = 0;
 }
@@ -252,3 +262,5 @@ if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(vi
 selectFileElem.addEventListener("change", selectFile)
 deleteButton.addEventListener("click", deleteRoom)
 updateButton.addEventListener("click", updateRoom)
+
+

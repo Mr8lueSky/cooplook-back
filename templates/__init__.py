@@ -22,10 +22,10 @@ def get_template_response(
     data: dict[str, Any] | None = None,
     exceptions: list[HTTPException] | None = None,
 ):
+    data = data or {}
+    exceptions = exceptions or []
     if ENV == "DEV":
-        data = data or {}
-        exceptions = exceptions or []
         return HTMLResponse(get_template(name).render(**data, exceptions=exceptions))
     if name not in templates:
         templates[name] = get_template(name)
-    return templates[name]
+    return templates[name].render(**data, exceptions=exceptions)

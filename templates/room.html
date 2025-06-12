@@ -13,12 +13,12 @@
 </head>
 
 <body>
-	<div id="alerts"></div>
-	<h3>You are in a <input type="text" value="{{ room.name }}" id="updated-name"> room!</h3>
+        <div id="alerts"></div>
+        <h3>You are in a <input type="text" value="{{ room.name }}" id="updated-name"> room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>
-	<p>Image link:</p><input type="url" id="updated-img-link" value="{{ room.img_link }}">
-	<input type="submit" id="update-room" value="Update name/image link">
+        <p>Image link:</p><input type="url" id="updated-img-link" value="{{ room.img_link }}">
+        <input type="submit" id="update-room" value="Update name/image link">
         <div id="video-wrapper">
                 <p id="alert"></p>
                 <video controls id=video preload="auto">
@@ -34,14 +34,34 @@
                         <input formmethod="post" type="submit" value="Submit">
                 </form>
         </div>
-	<select id="select-file">
-	{% for fi, filename in room.files %}
-		<option value="{{ fi }}" {% if room.curr_fi == fi %} selected {% endif %} >{{ filename }}</option>	
-	{% endfor %}
-	</select>
-	<input type="submit" id="delete-room" value="Delete room">
-        <script src="/static/room.js"></script>
+        <select id="select-file">
+                {% for fi, filename in room.files %}
+                <option value="{{ fi }}" {% if room.curr_fi == fi %} selected {% endif %}>{{ filename }}</option>
+                {% endfor %}
+        </select>
+	<form id="create-form" method="POST" action="/rooms/{{ room.room_id }}/vs_link" enctype="multipart/form-data">
+                <h3>Update room's source</h3>
+                <select id="video-from" autocomplete="off">
+                        <option id="link" value="from-link">From a link</option>
+                        <option id="torrent" value="from-torrent">From torrent</option>
+                </select>
+                <div id="from-link">
+                        <input id="video-link" name="video_link" placeholder="Link to a video">
+
+                </div>
+
+                <div id="from-torrent">
+                        <input type="file" name="torrent_file">
+                </div>
+                <input id="create-room" type="submit" value="Submit">
+
+
+        </form>
+
+        <input type="submit" id="delete-room" value="Delete room">
         <script src="/static/alerts.js"></script>
+        <script src="/static/video_source.js"></script>
+        <script src="/static/room.js"></script>
 </body>
 
 </html>

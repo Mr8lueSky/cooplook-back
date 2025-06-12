@@ -71,12 +71,12 @@ class RoomModel(MappedAsDataclass, BaseModel):
         cls,
         session: AsyncSession,
         room_id: UUID,
-        last_watch_ts: Optional[float] = None,
-        last_file_ind: Optional[int] = None,
-        name: Optional[str] = None,
-        video_source: Optional[VideoSourcesEnum] = None,
-        video_source_data: Optional[str] = None,
-        img_link: Optional[str] = None,
+        last_watch_ts: float | None = None,
+        last_file_ind: int | None = None,
+        name: str | None = None,
+        vs_cls: type[VideoSource] | None = None,
+        video_source_data: str | None = None,
+        img_link: str | None = None,
     ):
         values = {}
         if last_watch_ts is not None:
@@ -85,8 +85,8 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["last_file_ind"] = last_file_ind
         if name is not None:
             values["name"] = name
-        if video_source is not None:
-            values["video_source"] = video_source
+        if vs_cls is not None:
+            values["video_source"] = source_to_enum[vs_cls]
         if video_source_data is not None:
             values["video_source_data"] = video_source_data
         if img_link is not None:

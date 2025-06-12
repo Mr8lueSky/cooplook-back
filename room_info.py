@@ -198,7 +198,9 @@ class RoomInfo(Logging):
 
 
 async def take_room(session: AsyncSession, room_id: UUID):
-    rooms.pop(room_id, None)
+    prev_room = rooms.pop(room_id, None)
+    if prev_room:
+        await prev_room.cleanup()
     room_model = await RoomModel.get_room_id(session, room_id)
     rooms[room_id] = RoomInfo.from_model(room_model)
 

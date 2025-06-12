@@ -52,6 +52,23 @@ class CreateRoomSchema(BaseSchema):
 class CreateRoomLinkSchema(CreateRoomSchema):
     video_link: str = LinkField
 
+class UpdateSourceToLink(BaseSchema):
+    video_link: str = LinkField
+
+
+class UpdateSourceToTorrentSchema(BaseSchema):
+    torrent_file: Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)]
+    file_content: bytes = Field(
+        init=False, init_var=False, exclude=True, default_factory=bytes
+    )
+
+    @model_validator(mode="after")
+    def set_content(cls, values):
+        values.file_content = values.torrent_file.file.read()
+        if not is_valid_torrent(values.file_content):
+            raise UnprocessableEntity("Not a valid torrent")
+        return values
+
 
 class CreateRoomTorrentSchema(CreateRoomSchema):
     torrent_file: Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)]
