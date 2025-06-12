@@ -20,8 +20,7 @@ let ignoreWaiting = 0;
 let videoElem = document.getElementById("video");
 videoElem.muted = true;
 
-let fuButton = document.getElementById("force-uns")
-let fsButton = document.getElementById("force-sus")
+let deleteButton = document.getElementById("delete-room")
 
 let peopleCountElem = document.getElementById("people-count");
 let currentStatusElem = document.getElementById("current-status");
@@ -193,7 +192,12 @@ let sendCommand = (cmd, data) => {
         }
 }
 
-
+let deleteRoom = async () => {
+	await fetch("", {
+	method: "DELETE"
+	})
+	document.location.href = "/rooms"
+}
 
 
 videoElem.addEventListener("playing", () => {
@@ -218,6 +222,8 @@ videoElem.addEventListener("canplaythrough", () => {
         sendCommand(UNSUSPEND, videoElem.currentTime)
 })
 
+
+
 videoElem.addEventListener("error", () => {})
 
 if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" ||
@@ -228,3 +234,4 @@ if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(vi
 }
 
 selectFileElem.addEventListener("change", selectFile)
+deleteButton.addEventListener("click", deleteRoom)

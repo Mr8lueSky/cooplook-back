@@ -156,6 +156,13 @@ async def get_video_file(
     return await room.video_source.get_video_response(request)
 
 
+@app.delete("/rooms/{room_id}")
+async def delete_room(room_id: UUID, _: GetUserSchema = Depends(current_user)):
+    async with async_session_maker.begin() as session:
+        await RoomModel.delete(session, room_id)
+    return RedirectResponse("/rooms/", 303)
+
+
 @app.get("/rooms/{room_id}")
 async def inside_room(
     room_id: UUID, _: GetUserSchema = Depends(current_user)

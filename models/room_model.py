@@ -2,7 +2,7 @@ from enum import Enum
 from typing import Optional
 from uuid import UUID, uuid1
 
-from sqlalchemy import String, Uuid, exists, select, update
+from sqlalchemy import String, Uuid, delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
@@ -93,6 +93,11 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["img_link"] = img_link
 
         stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
+        await session.execute(stmt)
+    
+    @classmethod
+    async def delete(cls, session: AsyncSession, room_id: UUID):
+        stmt = delete(RoomModel).where(RoomModel.room_id == room_id)
         await session.execute(stmt)
 
     @classmethod
