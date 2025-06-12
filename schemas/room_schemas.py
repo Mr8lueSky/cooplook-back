@@ -9,9 +9,6 @@ from pydantic_core import core_schema
 
 from config import MAX_TORRENT_FILE_SIZE
 from exceptions import ContentTooLarge, UnprocessableEntity
-from models import room_model
-from models.room_model import RoomModel
-from room_info import RoomInfo
 from schemas.base_schema import BaseSchema
 
 RoomNameField = Field(min_length=3, max_length=31, pattern=r"[a-zA-Z ,./|\\?!:0-9]*")
@@ -47,16 +44,17 @@ class FileSizeValidator:
         )
 
 
-class CreateRoomLinkSchema(BaseSchema):
+class CreateRoomSchema(BaseSchema):
     name: str = RoomNameField
+    img_link: str = LinkField
+
+
+class CreateRoomLinkSchema(CreateRoomSchema):
     video_link: str = LinkField
-    image_link: str = LinkField
 
 
-class CreateRoomTorrentSchema(BaseSchema):
-    name: str = RoomNameField
+class CreateRoomTorrentSchema(CreateRoomSchema):
     torrent_file: Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)]
-    image_link: str = LinkField
     file_content: bytes = Field(
         init=False, init_var=False, exclude=True, default_factory=bytes
     )
@@ -69,43 +67,11 @@ class CreateRoomTorrentSchema(BaseSchema):
         return values
 
 
-class GetRoomSchema(BaseSchema):
+class GetRoomSchema(CreateRoomSchema):
     room_id: UUID
-    name: str
-    video: Optional[str]
-    img_link: str
-
-    @classmethod
-    def from_room_info(cls, room_info: RoomInfo):
-        return cls(
-            room_id=room_info.room_id,
-            name=room_info.name,
-            video=room_info.video_source.get_player_src(),
-            img_link=room_info.img_link,
-        )
-
-    @classmethod
-    def from_room_model(cls, room_model: RoomModel):
-        return cls(
-            room_id=room_model.room_id,
-            name=room_model.name,
-            video=None,
-            img_link=room_model.img_link,
-        )
 
 
 class GetRoomWatchingSchema(GetRoomSchema):
     files: list[tuple[int, str]]
     curr_fi: int
-    img_link: str
-
-    @classmethod
-    def from_room_info(cls, room_info: RoomInfo):
-        return cls(
-            room_id=room_info.room_id,
-            name=room_info.name,
-            video=room_info.video_source.get_player_src(),
-            files=room_info.get_available_files(),
-            curr_fi=room_info.video_source.fi,
-            img_link=room_info.img_link,
-        )
+    video: Optional[str]

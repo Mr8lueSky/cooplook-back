@@ -118,7 +118,7 @@ async def create_room_from_link(
 ) -> Response:
     async with async_session_maker.begin() as session:
         r = await RoomModel.create(
-            session, room.name, HttpLinkVideoSource, room.video_link, room.image_link
+            session, room.name, HttpLinkVideoSource, room.video_link, room.img_link
         )
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
 
@@ -137,7 +137,11 @@ async def create_room_torrent(
 
     async with async_session_maker.begin() as session:
         r = await RoomModel.create(
-            session, room.name, TorrentVideoSource, torrent_fpth.as_posix(), room.image_link
+            session,
+            room.name,
+            TorrentVideoSource,
+            torrent_fpth.as_posix(),
+            room.img_link,
         )
 
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
@@ -159,7 +163,8 @@ async def inside_room(
     async with async_session_maker.begin() as session:
         room = await get_room(session, room_id)
         return get_template_response(
-            "room", {"room": GetRoomWatchingSchema.from_room_info(room)}
+            "room",
+            {"room": GetRoomWatchingSchema.model_validate(room, from_attributes=True)},
         )
 
 
@@ -169,7 +174,11 @@ async def list_rooms(exceptions: list[HTTPException] | None = None):
         rooms = await RoomModel.get_all(session)
         return get_template_response(
             "rooms",
-            {"rooms": [GetRoomSchema.from_room_model(r) for r in rooms]},
+            {
+                "rooms": [
+                    GetRoomSchema.model_validate(r, from_attributes=True) for r in rooms
+                ]
+            },
             exceptions,
         )
 

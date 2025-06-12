@@ -57,6 +57,14 @@ class RoomInfo(Logging):
         )
         r.video_source.start()
         return r
+    
+    @property
+    def curr_fi(self):
+        return self.video_source.curr_fi
+    
+    @property
+    def video(self):
+        return self.video_source.get_player_src()
 
     async def handle_set_new_file(self, new_fi: int, ws_id: int) -> bool:
         if not self.video_source.set_current_fi(new_fi):
@@ -135,7 +143,7 @@ class RoomInfo(Logging):
             await self.handle_set_new_file(arg, ws_id)
         async with async_session_maker.begin() as session:
             await RoomModel.update(
-                session, self.room_id, self.current_time, self.video_source.fi
+                session, self.room_id, self.current_time, self.video_source.curr_fi
             )
 
     async def handle_leave(self, ws_id: int):
@@ -185,6 +193,10 @@ class RoomInfo(Logging):
     async def cleanup(self):
         self.video_source.cancel_current_requests()
         self.video_source.cleanup()
+
+    @property
+    def files(self):
+        return self.get_available_files()
 
 
 async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:

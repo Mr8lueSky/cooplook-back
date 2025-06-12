@@ -14,7 +14,7 @@ class VideoSource(abc.ABC):
     def __init__(self, _: str, file_index: int, room_id: UUID) -> None:
         super().__init__()
         self.room_id: UUID | None = room_id
-        self.fi = file_index
+        self.curr_fi = file_index
 
     def get_player_src(self) -> str:
         return f"/files/{self.room_id}"
@@ -62,7 +62,7 @@ class TorrentVideoSource(VideoSource):
     def __init__(self, torrent: bytes | str, file_index: int, room_id: UUID):
         super().__init__("", file_index, room_id)
         self.torrent = torrent
-        self.tm = TorrentManager(self.torrent, self.fi, self.save_path)
+        self.tm = TorrentManager(self.torrent, self.curr_fi, self.save_path)
         self.resps: list[LoadingTorrentFileResponse] = []
 
     @property
@@ -73,10 +73,10 @@ class TorrentVideoSource(VideoSource):
 
     def set_current_fi(self, fi: int) -> bool:
         """Returns is file changed or not"""
-        if fi == self.fi:
+        if fi == self.curr_fi:
             return False
         self.tm.set_new_fi(fi)
-        self.fi = fi
+        self.curr_fi = fi
         self.tm.initiate_torrent_download()
         return True
     
@@ -106,3 +106,4 @@ class TorrentVideoSource(VideoSource):
         )
         self.resps.append(r)
         return r
+
