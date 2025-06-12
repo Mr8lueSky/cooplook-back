@@ -57,11 +57,11 @@ class RoomInfo(Logging):
         )
         r.video_source.start()
         return r
-    
+
     @property
     def curr_fi(self):
         return self.video_source.curr_fi
-    
+
     @property
     def video(self):
         return self.video_source.get_player_src()
@@ -149,9 +149,7 @@ class RoomInfo(Logging):
     async def handle_leave(self, ws_id: int):
         self.wss.pop(ws_id, None)
         if ws_id in self.suspend_by:
-            await self.handle_susp_unsusp(
-                Commands.UNSUSPEND, self.current_time, ws_id
-            )
+            await self.handle_susp_unsusp(Commands.UNSUSPEND, self.current_time, ws_id)
         await self.handle_play_pause(Commands.PAUSE, self.current_time, -1)
         await self.send_room(Commands.people_count_cmd(len(self.wss)))
         self.last_leave_ts = time()
@@ -199,11 +197,16 @@ class RoomInfo(Logging):
         return self.get_available_files()
 
 
+async def take_room(session: AsyncSession, room_id: UUID):
+    rooms.pop(room_id, None)
+    room_model = await RoomModel.get_room_id(session, room_id)
+    rooms[room_id] = RoomInfo.from_model(room_model)
+
+
 async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
     async with lock:
         if room_id not in rooms:
-            room_model = await RoomModel.get_room_id(session, room_id)
-            rooms[room_id] = RoomInfo.from_model(room_model)
+            await take_room(session, room_id)
     return rooms[room_id]
 
 
@@ -228,6 +231,7 @@ async def _monitor_rooms():
             monitor_logger.debug(f"Cleaned room {room_id}")
             await asyncio.sleep(0)
         monitor_logger.info("Room cleanup finished")
+
 
 async def monitor_rooms():
     asyncio.create_task(_monitor_rooms())

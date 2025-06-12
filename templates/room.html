@@ -14,9 +14,11 @@
 
 <body>
 	<div id="alerts"></div>
-	<h3>You are in a {{ room.name }} room!</h3>
+	<h3>You are in a <input type="text" value="{{ room.name }}" id="updated-name"> room!</h3>
         <h4>People count: <span id="people-count">0<span></h4>
         <h4>Current status: <span id="current-status">PAUSE</span></h4>
+	<p>Image link:</p><input type="url" id="updated-img-link" value="{{ room.img_link }}">
+	<input type="submit" id="update-room" value="Update name/image link">
         <div id="video-wrapper">
                 <p id="alert"></p>
                 <video controls id=video preload="auto">

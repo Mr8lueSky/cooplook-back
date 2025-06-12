@@ -21,7 +21,10 @@ let videoElem = document.getElementById("video");
 videoElem.muted = true;
 
 let deleteButton = document.getElementById("delete-room")
+let updateButton = document.getElementById("update-room")
 
+let nameUpdateElm = document.getElementById("updated-name")
+let imgLinkUpdateElm = document.getElementById("updated-img-link")
 let peopleCountElem = document.getElementById("people-count");
 let currentStatusElem = document.getElementById("current-status");
 let alertElem = document.getElementById("alert");
@@ -42,8 +45,8 @@ let showOnOpen = [selectFileElem, videoElem];
 
 
 let setCurrTime = (currentTime) => {
-	if (!waiting) ignoreWaiting += 1;;
-	console.log(`Setting current time: ${ignoreWaiting}`)
+        if (!waiting) ignoreWaiting += 1;;
+        console.log(`Setting current time: ${ignoreWaiting}`)
         videoElem.currentTime = currentTime
 }
 
@@ -193,22 +196,35 @@ let sendCommand = (cmd, data) => {
 }
 
 let deleteRoom = async () => {
-	await fetch("", {
-	method: "DELETE"
-	})
-	document.location.href = "/rooms"
+        await fetch("", {
+                method: "DELETE"
+        })
+        document.location.href = "/rooms"
 }
 
-
+let updateRoom = async () => {
+        clearAlerts()
+        await fetch("", {
+                method: "PUT",
+                headers: {
+                        "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                        name: nameUpdateElm.value,
+                        img_link: imgLinkUpdateElm.value
+                })
+        })
+        await showAlerts()
+}
 videoElem.addEventListener("playing", () => {
         // console.log("Set status PLAY from playing event")
         // setStatus(PLAY, send = true)
 })
 
 videoElem.addEventListener("waiting", () => {
-	waiting = true;
+        waiting = true;
         if (ignoreWaiting) {
-		console.log(`Ignore waiting! Left: ${ignoreWaiting}`)
+                console.log(`Ignore waiting! Left: ${ignoreWaiting}`)
                 ignoreWaiting -= 1;
                 return;
         }
@@ -217,7 +233,7 @@ videoElem.addEventListener("waiting", () => {
 })
 
 videoElem.addEventListener("canplaythrough", () => {
-	waiting = false;
+        waiting = false;
         console.log("Set status UNSUSPEND from canplaythrough event")
         sendCommand(UNSUSPEND, videoElem.currentTime)
 })
@@ -235,3 +251,4 @@ if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(vi
 
 selectFileElem.addEventListener("change", selectFile)
 deleteButton.addEventListener("click", deleteRoom)
+updateButton.addEventListener("click", updateRoom)

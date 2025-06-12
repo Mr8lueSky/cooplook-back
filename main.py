@@ -16,8 +16,8 @@ from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
-from room_info import get_room, monitor_rooms
-from schemas.room_schemas import (CreateRoomLinkSchema,
+from room_info import get_room, monitor_rooms, take_room
+from schemas.room_schemas import (CreateRoomLinkSchema, CreateRoomSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema)
 from schemas.user_schema import GetUserSchema, LoginUserSchema
@@ -34,6 +34,10 @@ app.mount("/static", StaticFiles(directory="static"))
 
 logger = logging.getLogger(__name__)
 
+alert_allowed = r"[a-zA-Z0-9:.]"
+
+# def format_message(msg: str):
+
 
 @app.exception_handler(HTTPException)
 def handle_http_exception(r: Request, exc: HTTPException):
@@ -43,7 +47,7 @@ def handle_http_exception(r: Request, exc: HTTPException):
             exceptions = json.loads(r.cookies.get("exc", "[]"))
         except Exception:
             exceptions = []
-        exceptions.append(str(exc.msg))
+        exceptions.append(exc.msg)
         resp.set_cookie("exc", json.dumps(exceptions))
         return resp
     return JSONResponse(
@@ -58,9 +62,7 @@ def handle_validation_error(r: Request, exc: RequestValidationError):
         exceptions = json.loads(r.cookies.get("exc", "[]"))
     except Exception:
         exceptions = []
-    exceptions.append(
-        [".".join(err["loc"]) + ": " + err["msg"] for err in exc.errors()]
-    )
+    exceptions.extend(".".join(err["loc"]) + ": " + err["msg"] for err in exc.errors())
     resp.set_cookie("exc", json.dumps(exceptions))
     return resp
 
@@ -128,12 +130,9 @@ async def create_room_torrent(
     room: CreateRoomTorrentSchema = Form(),
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
-    try:
-        torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
-        async with await anyio.open_file(torrent_fpth, mode="wb") as file:
-            await file.write(room.file_content)
-    except HTTPException as exc:
-        return await list_rooms([exc])
+    torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
+    async with await anyio.open_file(torrent_fpth, mode="wb") as file:
+        await file.write(room.file_content)
 
     async with async_session_maker.begin() as session:
         r = await RoomModel.create(
@@ -163,15 +162,30 @@ async def delete_room(room_id: UUID, _: GetUserSchema = Depends(current_user)):
     return RedirectResponse("/rooms/", 303)
 
 
+@app.put("/rooms/{room_id}")
+async def update_room(
+    room_id: UUID, room: CreateRoomSchema, _: GetUserSchema = Depends(current_user)
+):
+    async with async_session_maker.begin() as session:
+        await RoomModel.update(session, room_id, name=room.name, img_link=room.img_link)
+        await take_room(session, room_id)
+    return RedirectResponse(f"/rooms/{room_id}", 303)
+
+
 @app.get("/rooms/{room_id}")
 async def inside_room(
-    room_id: UUID, _: GetUserSchema = Depends(current_user)
+    room_id: UUID,
+    _: GetUserSchema = Depends(current_user),
 ) -> HTMLResponse:
     async with async_session_maker.begin() as session:
-        room = await get_room(session, room_id)
+        room_info = await get_room(session, room_id)
         return get_template_response(
             "room",
-            {"room": GetRoomWatchingSchema.model_validate(room, from_attributes=True)},
+            {
+                "room": GetRoomWatchingSchema.model_validate(
+                    room_info, from_attributes=True
+                )
+            },
         )
 
 
@@ -209,7 +223,7 @@ async def login(user: Annotated[LoginUserSchema, Form()]):
             token = await generate_token(session, user.name, user.password)
             resp = RedirectResponse("/rooms/", 303)
             resp.set_cookie("token", token, httponly=True)
-        except (HTTPException, RequestValidationError) as exc:
+        except (HTTPException, RequestValidationError):
             raise HTTPException("Incorrent username or password!")
     return resp
 
@@ -242,6 +256,7 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
+
 
 @app.get("/")
 async def index() -> RedirectResponse:
