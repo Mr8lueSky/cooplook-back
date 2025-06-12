@@ -32,7 +32,8 @@ class RoomModel(MappedAsDataclass, BaseModel):
 
     name: Mapped[str] = mapped_column(String(32))
     video_source: Mapped[VideoSourcesEnum]
-    video_source_data: Mapped[str] = mapped_column(String(64))
+    video_source_data: Mapped[str] = mapped_column(String(256))
+    img_link: Mapped[str] = mapped_column(String(256))
     room_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default_factory=uuid1)
     last_file_ind: Mapped[int] = mapped_column(default=0)
     last_watch_ts: Mapped[float] = mapped_column(default=0)
@@ -75,6 +76,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         name: Optional[str] = None,
         video_source: Optional[VideoSourcesEnum] = None,
         video_source_data: Optional[str] = None,
+        img_link: Optional[str] = None,
     ):
         values = {}
         if last_watch_ts is not None:
@@ -87,19 +89,30 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["video_source"] = video_source
         if video_source_data is not None:
             values["video_source_data"] = video_source_data
+        if img_link is not None:
+            values["img_link"] = img_link
+
         stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
         await session.execute(stmt)
 
     @classmethod
     async def create(
-        cls, session: AsyncSession, name: str, vs_cls: type[VideoSource], vs_data: str
+        cls,
+        session: AsyncSession,
+        name: str,
+        vs_cls: type[VideoSource],
+        vs_data: str,
+        img_link: str,
     ) -> "RoomModel":
         if vs_cls not in source_to_enum:
             raise NotFound("Video source not found: {vs_cls}")
         if await cls.exists_with_name(session, name):
             raise BadRequest("Room with same name already exists!")
         rm = RoomModel(
-            name=name, video_source=source_to_enum[vs_cls], video_source_data=vs_data
+            name=name,
+            video_source=source_to_enum[vs_cls],
+            video_source_data=vs_data,
+            img_link=img_link,
         )
         session.add(rm)
         await session.flush()

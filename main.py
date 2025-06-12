@@ -20,7 +20,7 @@ from room_info import get_room, monitor_rooms
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema)
-from schemas.user_schema import LoginUserSchema, GetUserSchema
+from schemas.user_schema import GetUserSchema, LoginUserSchema
 from templates import get_template_response
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
 
@@ -117,9 +117,10 @@ async def create_room_from_link(
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
     async with async_session_maker.begin() as session:
-        r = await RoomModel.create(session, room.name, HttpLinkVideoSource, room.link)
+        r = await RoomModel.create(
+            session, room.name, HttpLinkVideoSource, room.video_link, room.image_link
+        )
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
-
 
 
 @app.post("/rooms/from_torrent")
@@ -136,7 +137,7 @@ async def create_room_torrent(
 
     async with async_session_maker.begin() as session:
         r = await RoomModel.create(
-            session, room.name, TorrentVideoSource, torrent_fpth.as_posix()
+            session, room.name, TorrentVideoSource, torrent_fpth.as_posix(), room.image_link
         )
 
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
@@ -225,7 +226,6 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
-
 
 @app.get("/")
 async def index() -> RedirectResponse:

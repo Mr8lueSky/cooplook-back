@@ -35,6 +35,7 @@ class RoomInfo(Logging):
     video_source: VideoSource
     name: str
     room_id: UUID
+    img_link: str
     unsuspend_to: VideoStatus = VideoStatus.PLAY
     wss: dict[int, WebSocket] = field(default_factory=dict)
     last_ws_id: int = 0
@@ -51,6 +52,7 @@ class RoomInfo(Logging):
             vs_cls(model.video_source_data, model.last_file_ind, model.room_id),
             model.name,
             model.room_id,
+            model.img_link,
             _current_time=model.last_watch_ts,
         )
         r.video_source.start()

@@ -12,18 +12,20 @@ env = Environment(
 
 templates = {}
 
+
 def get_template(name: str) -> Template:
     return env.get_template(f"{name}.html")
 
+
 def get_template_response(
-    name: str, data: dict[str, Any] | None = None, exceptions: list[HTTPException] | None = None
+    name: str,
+    data: dict[str, Any] | None = None,
+    exceptions: list[HTTPException] | None = None,
 ):
     if ENV == "DEV":
         data = data or {}
         exceptions = exceptions or []
-        return HTMLResponse(
-            get_template(name).render(**data, exceptions=exceptions)
-        )
+        return HTMLResponse(get_template(name).render(**data, exceptions=exceptions))
     if name not in templates:
         templates[name] = get_template(name)
     return templates[name]

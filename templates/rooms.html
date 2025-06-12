@@ -13,7 +13,7 @@
 	<h3>List of rooms:</h3>
         <ul id="room-list">
                 {% for room in rooms %}
-                <li><a href="/rooms/{{ room.room_id }}">{{ room.name }}</a></li>
+		<li><a href="/rooms/{{ room.room_id }}"><img src="{{ room.img_link }}" alt="">{{ room.name }}</a></li>
                 {% endfor %}
         </ul>
         <div id="room-create">
@@ -24,8 +24,9 @@
                                 <option id="torrent" value="from-torrent">From torrent</option>
                         </select>
                         <input id="room-name" type="text" name="name" placeholder="Room name">
+			<input type="text" name="image_link" placeholder="Link to a room image">
                         <div id="from-link">
-                                <input id="video-link" name="link" placeholder="Link to a video">
+                                <input id="video-link" name="video_link" placeholder="Link to a video">
 
                         </div>
 
