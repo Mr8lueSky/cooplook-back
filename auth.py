@@ -15,7 +15,7 @@ from models.user_model import UserModel
 from schemas.user_schema import GetUserSchema
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 30
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30 # one mounth
 SECRET_KEY_JWK = OctetJWK(AUTH_SECRET_KEY)
 jwt_encoder = jwt.JWT()
 

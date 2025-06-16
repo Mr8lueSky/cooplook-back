@@ -7,7 +7,7 @@ from config import ENV
 from exceptions import HTTPException
 
 env = Environment(
-    loader=FileSystemLoader(searchpath="templates"),
+    loader=FileSystemLoader(searchpath="templates/v2"),
 )
 
 templates = {}

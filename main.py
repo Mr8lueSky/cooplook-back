@@ -18,7 +18,7 @@ from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
 from room_info import get_room, monitor_rooms, take_room
-from schemas.room_schemas import (CreateRoomLinkSchema, CreateRoomSchema,
+from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema, UpdateSourceToLink,
                                   UpdateSourceToTorrentSchema)
@@ -49,7 +49,7 @@ def format_exc_msg(msg: str):
 @app.exception_handler(HTTPException)
 def handle_http_exception(r: Request, exc: HTTPException):
     if exc.html:
-        resp = RedirectResponse("../", 303)
+        resp = RedirectResponse(".", 303)
         try:
             exceptions = json.loads(r.cookies.get("exc", "[]"))
         except Exception:
@@ -64,7 +64,7 @@ def handle_http_exception(r: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 def handle_validation_error(r: Request, exc: RequestValidationError):
-    resp = RedirectResponse("../", 303)
+    resp = RedirectResponse(".", 303)
     try:
         exceptions = json.loads(r.cookies.get("exc", "[]"))
     except Exception:
@@ -165,25 +165,18 @@ async def delete_room(room_id: UUID, _: GetUserSchema = Depends(current_user)):
     return RedirectResponse("/rooms/", 303)
 
 
-@app.put("/rooms/{room_id}")
-async def update_room(
-    room_id: UUID, room: CreateRoomSchema, _: GetUserSchema = Depends(current_user)
-):
-    async with async_session_maker.begin() as session:
-        await RoomModel.update(session, room_id, name=room.name, img_link=room.img_link)
-        await take_room(session, room_id)
-    return RedirectResponse(f"/rooms/{room_id}", 303)
-
-
 @app.post("/rooms/{room_id}/vs_torrent")
 async def update_source_to_torrent(
     room_id: UUID,
-    torrent: UpdateSourceToTorrentSchema = Form(),
+    room: UpdateSourceToTorrentSchema = Form(),
     _: GetUserSchema = Depends(current_user),
 ):
-    torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
-    async with await anyio.open_file(torrent_fpth, mode="wb") as file:
-        await file.write(torrent.file_content)
+    torrent_fpth = None
+    if room.torrent_file is not None and room.file_content is not None:
+        torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
+        async with await anyio.open_file(torrent_fpth, mode="wb") as file:
+            await file.write(room.file_content)
+        torrent_fpth = torrent_fpth.as_posix()
 
     async with async_session_maker.begin() as session:
         await RoomModel.update(
@@ -192,7 +185,9 @@ async def update_source_to_torrent(
             last_watch_ts=0,
             last_file_ind=0,
             vs_cls=TorrentVideoSource,
-            video_source_data=torrent_fpth.as_posix(),
+            name=room.name or None,
+            img_link=room.img_link or None,
+            video_source_data=torrent_fpth or None,
         )
         await take_room(session, room_id)
         return RedirectResponse(f"/rooms/{room_id}", 303)
@@ -201,7 +196,7 @@ async def update_source_to_torrent(
 @app.post("/rooms/{room_id}/vs_link")
 async def update_source_to_link(
     room_id: UUID,
-    link: UpdateSourceToLink = Form(),
+    room: UpdateSourceToLink = Form(),
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
     async with async_session_maker.begin() as session:
@@ -211,7 +206,9 @@ async def update_source_to_link(
             last_watch_ts=0,
             last_file_ind=0,
             vs_cls=HttpLinkVideoSource,
-            video_source_data=link.video_link,
+            name=room.name or None,
+            img_link=room.img_link or None,
+            video_source_data=room.video_link or None,
         )
         await take_room(session, room_id)
         return RedirectResponse(f"/rooms/{room_id}", 303)

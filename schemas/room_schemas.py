@@ -4,15 +4,20 @@ from uuid import UUID
 
 import libtorrent as lt
 from fastapi import UploadFile
-from pydantic import Field, model_validator
+from pydantic import Field, StringConstraints, model_validator
 from pydantic_core import core_schema
 
 from config import MAX_TORRENT_FILE_SIZE
 from exceptions import ContentTooLarge, UnprocessableEntity
 from schemas.base_schema import BaseSchema
 
-RoomNameField = Field(min_length=3, max_length=31, pattern=r"[a-zA-Z ,./|\\?!:0-9]*")
-LinkField = Field(min_length=3, max_length=255)
+RoomNameField = Annotated[
+    str,
+    StringConstraints(
+        min_length=3, max_length=31, pattern=r"[а-яА-Яa-zA-Z ,./|\\?!:0-9]*"
+    ),
+]
+LinkField = Annotated[str, StringConstraints(min_length=3, max_length=255)]
 torrent_type = str | bytes
 
 
@@ -45,25 +50,30 @@ class FileSizeValidator:
 
 
 class CreateRoomSchema(BaseSchema):
-    name: str = RoomNameField
-    img_link: str = LinkField
+    name: RoomNameField
+    img_link: LinkField
 
 
 class CreateRoomLinkSchema(CreateRoomSchema):
-    video_link: str = LinkField
-
-class UpdateSourceToLink(BaseSchema):
-    video_link: str = LinkField
+    video_link: LinkField
 
 
-class UpdateSourceToTorrentSchema(BaseSchema):
-    torrent_file: Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)]
-    file_content: bytes = Field(
+class UpdateSourceToLink(CreateRoomSchema):
+    video_link: LinkField | None = None
+
+
+class UpdateSourceToTorrentSchema(CreateRoomSchema):
+    torrent_file: (
+        Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)] | None
+    ) = None
+    file_content: bytes | None = Field(
         init=False, init_var=False, exclude=True, default_factory=bytes
     )
 
     @model_validator(mode="after")
     def set_content(cls, values):
+        if values.torrent_file is None:
+            return values
         values.file_content = values.torrent_file.file.read()
         if not is_valid_torrent(values.file_content):
             raise UnprocessableEntity("Not a valid torrent")
@@ -82,7 +92,6 @@ class CreateRoomTorrentSchema(CreateRoomSchema):
         if not is_valid_torrent(values.file_content):
             raise UnprocessableEntity("Not a valid torrent")
         return values
-
 
 class GetRoomSchema(CreateRoomSchema):
     room_id: UUID

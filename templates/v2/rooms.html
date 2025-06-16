@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Rooms | CoopLook</title>
+        <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+        <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap" rel="stylesheet">
+        <style>
+                :root {
+                        --primary-color: #2C8C2B;
+                        --dark-bg: #222222;
+                        --card-bg: #333333;
+                        --text-color: #ffffff;
+                        --text-secondary: #cccccc;
+                        --error-color: #DC143C;
+                }
+
+                * {
+                        margin: 0;
+                        padding: 0;
+                        box-sizing: border-box;
+                        font-family: 'Roboto', Arial, sans-serif;
+                }
+
+                body {
+                        background-color: var(--dark-bg);
+                        color: var(--text-color);
+                }
+
+                .container {
+                        width: 100%;
+                        max-width: 80%;
+                        margin: 0 auto;
+                        padding: 20px 0;
+                }
+
+                /* Header styles */
+                .header {
+                        background-color: var(--dark-bg);
+                        padding: 15px 0;
+                        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+                }
+
+                .header-content {
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                }
+
+                .logo {
+                        font-size: 28px;
+                        font-weight: bold;
+                        color: var(--primary-color);
+                }
+
+                .user-actions a {
+                        color: var(--text-color);
+                        margin-left: 15px;
+                        text-decoration: none;
+                        font-size: 20px;
+                }
+
+                /* Modal styles */
+                .modal-overlay {
+                        position: fixed;
+                        top: 0;
+                        left: 0;
+                        right: 0;
+                        bottom: 0;
+                        background-color: rgba(0, 0, 0, 0.7);
+                        display: flex;
+                        justify-content: center;
+                        align-items: center;
+                        z-index: 1000;
+                        opacity: 0;
+                        visibility: hidden;
+                        transition: opacity 0.3s ease, visibility 0.3s;
+                }
+
+                .modal-overlay.active {
+                        opacity: 1;
+                        visibility: visible;
+                }
+
+                .modal-content {
+                        background-color: var(--card-bg);
+                        padding: 30px;
+                        border-radius: 10px;
+                        width: 90%;
+                        max-width: 500px;
+                        max-height: 90vh;
+                        overflow-y: auto;
+                        box-shadow: 0 5px 20px rgba(0, 0, 0, 0.2);
+                        position: relative;
+                }
+
+                .close-btn {
+                        position: absolute;
+                        top: 15px;
+                        right: 15px;
+                        background: none;
+                        border: none;
+                        color: #aaaaaa;
+                        font-size: 24px;
+                        cursor: pointer;
+                        transition: color 0.3s;
+                }
+
+                .close-btn:hover {
+                        color: var(--error-color);
+                }
+
+                /* Form styles */
+                .form-group {
+                        margin-bottom: 20px;
+                }
+
+                .form-group label {
+                        color: var(--text-color);
+                        display: block;
+                        margin-bottom: 10px;
+                }
+
+                .form-group input {
+                        color: var(--text-color);
+                        background-color: #2a2a2a;
+                        width: 100%;
+                        padding: 10px;
+                        border-radius: 4px;
+                        border: 1px solid #444;
+                }
+
+                /* Button styles */
+                .btn {
+                        background-color: var(--primary-color);
+                        color: var(--text-color);
+                        border: none;
+                        padding: 12px 25px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 16px;
+                        font-weight: 500;
+                        transition: background-color 0.3s;
+                }
+
+                .btn:hover {
+                        background-color: #0B4A1E;
+                }
+
+                /* Rooms section */
+                .section-title {
+                        display: flex;
+                        align-items: center;
+                        justify-content: space-between;
+                        margin-bottom: 25px;
+                }
+
+                /* Link style */
+                a,
+                a:link,
+                a:hover,
+                a:active,
+                a:visited {
+                        text-decoration: none;
+                        color: var(--text-color);
+                }
+
+                .add-room-btn {
+                        background-color: var(--primary-color);
+                        color: var(--text-color);
+                        border: none;
+                        padding: 10px 15px;
+                        border-radius: 6px;
+                        cursor: pointer;
+                        font-size: 20px;
+                        font-weight: 500;
+                        display: flex;
+                        align-items: center;
+                        transition: background-color 0.3s;
+                }
+
+                .add-room-btn:hover {
+                        background-color: #0B4A1E;
+                }
+
+                .add-room-btn i {
+                        margin-right: 8px;
+                }
+
+                .rooms-grid {
+                        display: grid;
+                        grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+                        gap: 25px;
+                }
+
+                .room-card {
+                        background-color: var(--card-bg);
+                        border-radius: 10px;
+                        overflow: hidden;
+                        transition: transform 0.3s ease, box-shadow 0.3s;
+                        cursor: pointer;
+                }
+
+                .room-card:hover {
+                        transform: translateY(-5px);
+                        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.3);
+                }
+
+                .thumbnail-container {
+                        position: relative;
+                        width: 100%;
+                        padding-top: 150%;
+                        /* Портретная ориентация 2:3 */
+                        overflow: hidden;
+                        background-color: #2a2a2a;
+                }
+
+                .room-thumbnail {
+                        position: absolute;
+                        top: 0;
+                        left: 0;
+                        width: 100%;
+                        height: 100%;
+                        object-fit: cover;
+                        transition: transform 0.5s;
+                        opacity: 0;
+                }
+
+                .room-thumbnail.loaded {
+                        opacity: 1;
+                }
+
+                .room-card:hover .room-thumbnail {
+                        transform: scale(1.05);
+                }
+
+                .room-info {
+                        padding: 12px;
+                }
+
+                .room-title {
+                        font-size: 16px;
+                        margin: 0;
+                        font-weight: 500;
+                        display: -webkit-box;
+                        -webkit-line-clamp: 2;
+                        -webkit-box-orient: vertical;
+                        overflow: hidden;
+                        color: var(--text-color);
+                }
+
+                /* Animations */
+                @keyframes spin {
+                        to {
+                                transform: rotate(360deg);
+                        }
+                }
+
+                .thumbnail-loader {
+                        position: absolute;
+                        top: 50%;
+                        left: 50%;
+                        transform: translate(-50%, -50%);
+                        width: 40px;
+                        height: 40px;
+                        border: 4px solid rgba(255, 255, 255, 0.1);
+                        border-radius: 50%;
+                        border-top-color: var(--primary-color);
+                        animation: spin 1s ease-in-out infinite;
+                }
+        </style>
+</head>
+
+<body>
+        <header class="header">
+                <div class="container header-content">
+                        <div class="logo">CoopLook</div>
+                        <div class="user-actions">
+                                <a href="/rooms">Rooms</a>
+                                <a href="#">Profile</a>
+                        </div>
+                </div>
+        </header>
+
+        <div id="alerts"></div>
+        <main class="container">
+                <div class="section-title">
+                        <h1>Rooms</h1>
+                        <button class="add-room-btn" id="add-room-btn">
+                                <i class="material-icons">add</i>
+                                Create Room
+                        </button>
+                </div>
+
+                <div class="rooms-grid" id="rooms-grid">
+
+                        {% for room in rooms %}
+                        <a href="/rooms/{{ room.room_id }}" class="room-card">
+                                <div class="thumbnail-container">
+                                        <div class="thumbnail-loader"></div>
+                                        <img src="{{ room.img_link }}" class="room-thumbnail loaded" loading="lazy" decoding="async" alt="{{ room.name }}" onload="this.classList.add('loaded')">
+                                </div>
+                                <div class="room-info">
+                                        <h3 class="room-title">{{ room.name }}</h3>
+                                </div>
+                        </a>
+
+                        {% endfor %}
+                </div>
+        </main>
+
+        <!-- Room creation modal -->
+        <div class="modal-overlay" id="edit-modal">
+                <div class="modal-content">
+                        <button class="close-btn" id="close-modal" aria-label="Close modal">&times;</button>
+                        <h1 class="modal-title">Create Room</h1>
+
+                        <form id="roomForm" method="POST" action="/rooms/from_link" enctype="multipart/form-data">
+                                <div class="form-group">
+                                        <label for="roomName">Room name</label>
+                                        <input minlength=3 maxlength=31 type="text" id="roomName" name="name" placeholder="Enter room name" required>
+                                </div>
+
+                                <div class="form-group">
+                                        <label for="video-from">Source</label>
+                                        <select id="video-from" autocomplete="off">
+                                                <option id="link" value="from-link">From a link</option>
+                                                <option id="torrent" value="from-torrent">From torrent</option>
+                                        </select>
+                                </div>
+
+                                <div class="form-group" id="from-link">
+                                        <label for="videoUrl">Video link</label>
+                                        <input maxlength=255 type="url" id="videoUrl" name="video_link" placeholder="https://example.com/video.mp4">
+                                </div>
+
+                                <div class="form-group" id="from-torrent">
+                                        <label for="roomFile">Torrent file</label>
+                                        <input id="roomFile" accept=".torrent" type="file" name="torrent_file">
+                                </div>
+
+
+                                <div class="form-group">
+                                        <label for="imageUrl">Image link</label>
+                                        <input maxlength=255 type="url" id="imageUrl" name="img_link" placeholder="https://example.com/image.jpg">
+                                </div>
+
+                                <input type="submit" class="btn" value="Create Room">
+                        </form>
+                </div>
+        </div>
+
+        <script src="/static/alerts.js"></script>
+        <script src="/static/video_source.js"></script>
+        <script>
+                let FROM_LINK_URL = `/rooms/from_link`;
+                let FROM_TORRENT_URL = `/rooms/from_torrent`;
+                let sourcesToLinks = {
+                        [FROM_LINK]: FROM_LINK_URL,
+                        [FROM_TORRENT]: FROM_TORRENT_URL
+                }
+                document.addEventListener('DOMContentLoaded', function() {
+                        // DOM elements
+                        const addRoomBtn = document.getElementById('add-room-btn');
+                        const editModal = document.getElementById('edit-modal');
+                        const closeModal = document.getElementById('close-modal');
+                        const roomForm = document.getElementById('roomForm');
+
+                        // Sample data for demonstration
+
+
+
+
+                        /**
+                         * Loads rooms into the grid
+                         * @param {Array} rooms - Array of room objects
+                         */
+
+                        // Modal controls
+                        addRoomBtn.addEventListener('click', (e) => {
+                                e.preventDefault();
+                                editModal.classList.add('active');
+                                document.body.style.overflow = 'hidden';
+                        });
+
+                        closeModal.addEventListener('click', () => {
+                                editModal.classList.remove('active');
+                                document.body.style.overflow = '';
+                        });
+
+                        editModal.addEventListener('click', (e) => {
+                                if (e.target === editModal) {
+                                        editModal.classList.remove('active');
+                                        document.body.style.overflow = '';
+                                }
+                        });
+
+                        // Form submission handler
+                        // Keyboard accessibility for modal
+                        document.addEventListener('keydown', (e) => {
+                                if (e.key === 'Escape' && editModal.classList.contains('active')) {
+                                        editModal.classList.remove('active');
+                                        document.body.style.overflow = '';
+                                }
+                        });
+
+                        // Initial load of rooms
+                });
+        </script>
+
+</body>
+
+</html>

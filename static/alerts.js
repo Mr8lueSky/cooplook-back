@@ -1,6 +1,13 @@
 let alertsElm = document.getElementById("alerts")
 
 
+let createAlert = (msg) => {
+        let alertElm = document.createElement("h1")
+        alertElm.textContent = msg
+        alertsElm.appendChild(alertElm)
+}
+
+
 let clearAlerts = () => {
         alertsElm.innerHTML = ""
 }
@@ -18,11 +25,7 @@ let showAlerts = async () => {
                 await cookieStore.delete('exc')
                 return;
         }
-        alerts.forEach(alertMsg => {
-                let alertElm = document.createElement("h1")
-                alertElm.textContent = alertMsg
-                alertsElm.appendChild(alertElm)
-        });
+        alerts.forEach(alertMsg => createAlert(alertMsg));
         await cookieStore.delete('exc')
 }
 

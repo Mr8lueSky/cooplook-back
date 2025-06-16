@@ -7,13 +7,7 @@ const UNSUSPEND = "up"
 const FORCE_UNSUSPEND = "fu"
 const RELOAD = "rl"
 const CHANGE_FILE = "cf"
-let FROM_LINK_URL = `/rooms/${room_id}/vs_link`;
-let FROM_TORRENT_URL = `/rooms/${room_id}/vs_torrent`;
 
-let sourcesToLinks = {
-        [FROM_LINK]: FROM_LINK_URL,
-        [FROM_TORRENT]: FROM_TORRENT_URL
-}
 
 let suspend = false;
 let initial = true;
@@ -24,17 +18,17 @@ let ignorePlay = 0;
 let ignorePause = 0;
 let ignoreWaiting = 0;
 
-let videoElem = document.getElementById("video");
+let videoElem = document.getElementById("main-video");
 videoElem.muted = true;
 
-let deleteButton = document.getElementById("delete-room")
+let deleteButton = document.getElementById("delete-btn")
 let updateButton = document.getElementById("update-room")
 
 let nameUpdateElm = document.getElementById("updated-name")
 let imgLinkUpdateElm = document.getElementById("updated-img-link")
 let peopleCountElem = document.getElementById("people-count");
 let currentStatusElem = document.getElementById("current-status");
-let alertElem = document.getElementById("alert");
+let videoAlertElem = document.getElementById("video-alert");
 let selectFileElem = document.getElementById("select-file")
 let videoContainer = document.getElementById("video-wrapper")
 
@@ -49,7 +43,7 @@ let cmdToStatus = {
         [UNSUSPEND]: "UNSUSPEND"
 };
 
-let showOnOpen = [selectFileElem, videoElem];
+let showOnOpen = [videoElem];
 
 
 
@@ -86,9 +80,9 @@ function setStatus(newStatus, send = false) {
         }
         console.log(`Changing status from ${currentStatus} to ${newStatus}`)
 
-        if (newStatus === SUSPEND) alertElem.textContent = "Waiting to load...";
-        else alertElem.textContent = "";
-        currentStatusElem.textContent = cmdToStatus[newStatus];
+        if (newStatus === SUSPEND) videoAlertElem.textContent = "Waiting to load...";
+        else videoAlertElem.textContent = "";
+        // currentStatusElem.textContent = cmdToStatus[newStatus];
         currentStatus = newStatus;
         if (send) {
                 sendCommand(newStatus, videoElem.currentTime)
@@ -169,7 +163,7 @@ let createSocket = () => {
                         console.log("UNSUSPEND");
                         return;
                 } else if (cmd == PEOPLE_COUNT) {
-                        peopleCountElem.textContent = arg;
+                        // peopleCountElem.textContent = arg;
                         return;
                 } else if (cmd == CHANGE_FILE) {
                         reloadVideo();
@@ -259,8 +253,8 @@ if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(vi
         document.getElementsByTagName("body")[0].insertAdjacentElement("beforebegin", newElement)
 }
 
-selectFileElem.addEventListener("change", selectFile)
+// selectFileElem.addEventListener("change", selectFile)
 deleteButton.addEventListener("click", deleteRoom)
-updateButton.addEventListener("click", updateRoom)
+// updateButton.addEventListener("click", updateRoom)
 
 

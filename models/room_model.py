@@ -85,9 +85,8 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["last_file_ind"] = last_file_ind
         if name is not None:
             values["name"] = name
-        if vs_cls is not None:
+        if vs_cls is not None and video_source_data is not None:
             values["video_source"] = source_to_enum[vs_cls]
-        if video_source_data is not None:
             values["video_source_data"] = video_source_data
         if img_link is not None:
             values["img_link"] = img_link
