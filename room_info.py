@@ -212,6 +212,13 @@ async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
     return rooms[room_id]
 
 
+async def delete_room(session: AsyncSession, room_id: UUID):
+    room = await get_room(session, room_id)
+    rooms.pop(room_id)
+    await RoomModel.delete(session, room_id)
+    await room.cleanup()
+
+
 async def _monitor_rooms():
     while True:
         await asyncio.sleep(60)

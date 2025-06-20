@@ -18,7 +18,7 @@ from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
-from room_info import get_room, monitor_rooms, retake_room
+from room_info import delete_room, get_room, monitor_rooms, retake_room
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema, UpdateSourceToLink,
@@ -161,9 +161,9 @@ async def get_video_file(
 
 
 @app.delete("/rooms/{room_id}")
-async def delete_room(room_id: UUID, _: GetUserSchema = Depends(current_user)):
+async def delete_room_end(room_id: UUID, _: GetUserSchema = Depends(current_user)):
     async with async_session_maker.begin() as session:
-        await RoomModel.delete(session, room_id)
+        await delete_room(session, room_id)
     return RedirectResponse("/rooms/", 303)
 
 
