@@ -9,7 +9,6 @@ from fastapi.responses import FileResponse
 import config
 from custom_responses import LoadingTorrentFileResponse, TorrentManager
 
-
 class VideoSource(abc.ABC):
     def __init__(self, _: str, file_index: int, room_id: UUID) -> None:
         super().__init__()
@@ -64,6 +63,7 @@ class TorrentVideoSource(VideoSource):
         self.torrent = torrent
         self.tm = TorrentManager(self.torrent, self.curr_fi, self.save_path)
         self.resps: list[LoadingTorrentFileResponse] = []
+        os.makedirs(self.SAVE_PATH, exist_ok=True)
 
     @property
     def save_path(self) -> str:
@@ -106,4 +106,5 @@ class TorrentVideoSource(VideoSource):
         )
         self.resps.append(r)
         return r
+
 

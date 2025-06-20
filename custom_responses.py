@@ -20,7 +20,9 @@ class TorrentManager(Logging):
         self.ti: lt.torrent_info = lt.torrent_info(torrent)
         self.piece_buffer: dict[int, bytes] = {}
         self.piece_wait: dict[int, int] = {}
-        self.ses: lt.session = lt.session()
+        self.ses: lt.session = lt.session(
+            {"enable_incoming_utp": False, "enable_incoming_tcp": False}
+        )
         self.fi: int = file_index
         self.files: lt.file_storage = self.ti.files()
         self.file_start, self.file_start_offset = self.bytes_to_piece_offset(0)
@@ -55,7 +57,7 @@ class TorrentManager(Logging):
         return pr.piece, pr.start
 
     def initiate_torrent_download(self):
-        if self.th is None: 
+        if self.th is None:
             self.th = self.ses.add_torrent({"ti": self.ti, "save_path": self.save_path})
         self.th.prioritize_pieces((i, 0) for i in range(self.ti.files().num_pieces()))
         self.th.prioritize_pieces(
@@ -64,7 +66,7 @@ class TorrentManager(Logging):
             if not self.th.have_piece(i)
         )
         self.th.set_piece_deadline(self.file_end, 0, 0)
-        self.initiate_request(0) 
+        self.initiate_request(0)
 
     def file_size(self) -> int:
         return self.files.file_size(self.fi)
@@ -80,7 +82,7 @@ class TorrentManager(Logging):
     def cleanup(self):
         if self.th is None:
             return
-        self.ses.remove_torrent(self.th, lt.session.delete_files) 
+        self.ses.remove_torrent(self.th, lt.session.delete_files)
 
     async def iter_pieces(self, b_start: int, b_end: int = -1) -> AsyncGenerator[bytes]:
         if b_end == -1:
@@ -136,7 +138,7 @@ class TorrentManager(Logging):
             )
 
         self.th.read_piece(piece_id)
-        
+
         self.logger.debug(f"Waiting for read on {piece_id}")
         while piece_id not in self.piece_buffer and finish > time():
             alerts = self.ses.pop_alerts()
@@ -200,9 +202,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
             async with asyncio.TaskGroup() as tg:
-                self.tasks.append(
-                    tg.create_task(self._download_single_range(send, 0))
-                )
+                self.tasks.append(tg.create_task(self._download_single_range(send, 0)))
                 while not await self.request.is_disconnected() and self.tasks:
                     await sleep(1)
                 self.cancel()

@@ -197,7 +197,7 @@ class RoomInfo(Logging):
         return self.get_available_files()
 
 
-async def take_room(session: AsyncSession, room_id: UUID):
+async def retake_room(session: AsyncSession, room_id: UUID):
     prev_room = rooms.pop(room_id, None)
     if prev_room:
         await prev_room.cleanup()
@@ -208,7 +208,7 @@ async def take_room(session: AsyncSession, room_id: UUID):
 async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
     async with lock:
         if room_id not in rooms:
-            await take_room(session, room_id)
+            await retake_room(session, room_id)
     return rooms[room_id]
 
 

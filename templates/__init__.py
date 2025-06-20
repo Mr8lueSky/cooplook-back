@@ -28,4 +28,6 @@ def get_template_response(
         return HTMLResponse(get_template(name).render(**data, exceptions=exceptions))
     if name not in templates:
         templates[name] = get_template(name)
-    return templates[name].render(**data, exceptions=exceptions)
+    return HTMLResponse(
+            templates[name].render(**data, exceptions=exceptions)
+            )

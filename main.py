@@ -1,6 +1,7 @@
 import json
 import logging
 from collections import defaultdict
+import os
 from string import ascii_lowercase, ascii_uppercase
 from typing import Annotated
 from uuid import UUID, uuid1
@@ -17,7 +18,7 @@ from config import ENV, TORRENT_FILES_SAVE_PATH
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
-from room_info import get_room, monitor_rooms, take_room
+from room_info import get_room, monitor_rooms, retake_room
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema, UpdateSourceToLink,
@@ -134,6 +135,7 @@ async def create_room_torrent(
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
     torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
+    os.makedirs(TORRENT_FILES_SAVE_PATH, exist_ok=True)
     async with await anyio.open_file(torrent_fpth, mode="wb") as file:
         await file.write(room.file_content)
 
@@ -189,7 +191,7 @@ async def update_source_to_torrent(
             img_link=room.img_link or None,
             video_source_data=torrent_fpth or None,
         )
-        await take_room(session, room_id)
+        await retake_room(session, room_id)
         return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
@@ -210,7 +212,7 @@ async def update_source_to_link(
             img_link=room.img_link or None,
             video_source_data=room.video_link or None,
         )
-        await take_room(session, room_id)
+        await retake_room(session, room_id)
         return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
