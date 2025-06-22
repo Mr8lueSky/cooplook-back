@@ -1,5 +1,4 @@
 from enum import Enum
-from typing import Optional
 from uuid import UUID, uuid1
 
 from sqlalchemy import String, Uuid, delete, exists, select, update
@@ -8,23 +7,12 @@ from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
 from exceptions import BadRequest, NotFound
 from models.base import BaseModel
-from video_sources import HttpLinkVideoSource, TorrentVideoSource, VideoSource
+from video_sources import VideoSource
 
 
 class VideoSourcesEnum(str, Enum):
     torrent = 0
     link = 1
-
-
-enum_to_source = {
-    VideoSourcesEnum.torrent: TorrentVideoSource,
-    VideoSourcesEnum.link: HttpLinkVideoSource,
-}
-
-source_to_enum = {
-    TorrentVideoSource: VideoSourcesEnum.torrent,
-    HttpLinkVideoSource: VideoSourcesEnum.link,
-}
 
 
 class RoomModel(MappedAsDataclass, BaseModel):
@@ -93,7 +81,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
 
         stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
         await session.execute(stmt)
-    
+
     @classmethod
     async def delete(cls, session: AsyncSession, room_id: UUID):
         stmt = delete(RoomModel).where(RoomModel.room_id == room_id)

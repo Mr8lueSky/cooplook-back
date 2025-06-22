@@ -25,20 +25,19 @@ class TorrentManager(Logging):
         )
         self.fi: int = file_index
         self.files: lt.file_storage = self.ti.files()
-        self.file_start, self.file_start_offset = self.bytes_to_piece_offset(0)
-        self.last_used_piece = self.file_start
-        self.file_end, self.file_end_offset = self.bytes_to_piece_offset(
-            self.file_size()
-        )
         self.save_path = save_path
+        self.init_file()
 
-    def set_new_fi(self, new_fi: int):
-        self.fi = new_fi
+    def init_file(self):
         self.file_start, self.file_start_offset = self.bytes_to_piece_offset(0)
         self.last_used_piece = self.file_start
         self.file_end, self.file_end_offset = self.bytes_to_piece_offset(
             self.file_size()
         )
+
+    def set_file_index(self, new_fi: int):
+        self.fi = new_fi
+        self.init_file()
 
     def get_curent_filename(self) -> str:
         return self.files.file_name(self.fi)

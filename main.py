@@ -1,7 +1,7 @@
 import json
 import logging
-from collections import defaultdict
 import os
+from collections import defaultdict
 from string import ascii_lowercase, ascii_uppercase
 from typing import Annotated
 from uuid import UUID, uuid1
@@ -154,7 +154,7 @@ async def create_room_torrent(
 @app.get("/files/{room_id}")
 async def get_video_file(
     room_id: UUID, request: Request, _: GetUserSchema = Depends(current_user)
-) -> FileResponse:
+) -> Response:
     async with async_session_maker.begin() as session:
         room = await get_room(session, room_id)
     return await room.video_source.get_video_response(request)
@@ -233,26 +233,19 @@ async def inside_room(
         )
 
 
-async def list_rooms(exceptions: list[HTTPException] | None = None):
-    exceptions = exceptions or []
-    async with async_session_maker.begin() as session:
-        rooms = await RoomModel.get_all(session)
-        return get_template_response(
-            "rooms",
-            {
-                "rooms": [
-                    GetRoomSchema.model_validate(r, from_attributes=True) for r in rooms
-                ]
-            },
-            exceptions,
-        )
-
-
 @app.get("/rooms/")
 async def list_rooms_end(
     _: GetUserSchema = Depends(current_user),
 ) -> HTMLResponse:
-    return await list_rooms()
+    async with async_session_maker.begin() as session:
+        rooms = await RoomModel.get_all(session)
+        room_models = [
+            GetRoomSchema.model_validate(r, from_attributes=True) for r in rooms
+        ]
+    return get_template_response(
+        "rooms",
+        {"rooms": room_models},
+    )
 
 
 @app.get("/login")

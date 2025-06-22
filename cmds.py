@@ -1,18 +1,23 @@
 from abc import ABC, abstractmethod
+from asyncio import Lock
+from collections.abc import Iterable, Iterator
 from dataclasses import dataclass, field
 from itertools import count
-from typing import Iterable, Iterator, Self
+from typing import Any, Callable, Self, override
+from uuid import UUID
 
 from fastapi import WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from logger import Logging
 from models.room_model import RoomModel
+from video_sources import VideoSource
 from video_status import PauseStatus, PlayStatus, SuspendStatus, VideoStatus
 
 client_commands: dict[str, type["ClientCommand"]] = {}
 
 
-def register_client_command(cls):
+def register_client_command(cls: type["ClientCommand"]) -> type["ClientCommand"]:
     if cls.prefix in client_commands:
         raise RuntimeError(f"Command {cls.prefix} is already defined!")
     client_commands[cls.prefix] = cls
@@ -37,7 +42,7 @@ class ServerCommand(ABC):
     def to_string(self) -> str: ...
 
 
-class StateChangeClientCommand(ClientCommand):
+class StateChangeClientCommand(ClientCommand, ABC):
     def __init__(self, by: int) -> None:
         super().__init__()
         self.by: int = by
@@ -69,13 +74,14 @@ class StateChangeClientCommand(ClientCommand):
 
 @register_client_command
 class ChangeFileClientCommand(StateChangeClientCommand):
-    prefix = "cf"
+    prefix: str = "cf"
 
     def __init__(self, by: int, file_ind: int) -> None:
         super().__init__(by)
-        self.file_ind = file_ind
+        self.file_ind: int = file_ind
 
     @classmethod
+    @override
     def from_arguments(cls, args: list[str], by: int) -> Self:
         try:
             file_ind = int(args[0])
@@ -83,6 +89,7 @@ class ChangeFileClientCommand(StateChangeClientCommand):
         except Exception as exc:
             raise ParseFailedException(exc)
 
+    @override
     def default(self, current_status: VideoStatus) -> VideoStatus:
         return SuspendStatus(0, self.file_ind)
 
@@ -90,9 +97,10 @@ class ChangeFileClientCommand(StateChangeClientCommand):
 class StatusChangeClientCommand(StateChangeClientCommand):
     def __init__(self, by: int, video_time: float) -> None:
         super().__init__(by)
-        self.video_time = video_time
+        self.video_time: float = video_time
 
     @classmethod
+    @override
     def from_arguments(cls, args: list[str], by: int) -> Self:
         try:
             timestamp = float(args[0])
@@ -105,22 +113,23 @@ class StatusChangeClientCommand(StateChangeClientCommand):
 class SuspendClientCommand(StatusChangeClientCommand):
     prefix: str = "sp"
 
+    @override
     def default(self, current_status: VideoStatus) -> VideoStatus:
-        new_status = SuspendStatus.from_status(current_status)
-        new_status.add_suspend_by(self.by)
+        new_status = SuspendStatus.from_status(current_status).add_suspend_by(self.by)
         return new_status
 
+    @override
     def handle_status_suspend(self, suspend_status: SuspendStatus) -> VideoStatus:
-        suspend_status.add_suspend_by(self.by)
-        return suspend_status
+        return suspend_status.add_suspend_by(self.by)
 
 
 @register_client_command
 class UnsuspendClientCommand(StatusChangeClientCommand):
     prefix: str = "up"
 
+    @override
     def handle_status_suspend(self, suspend_status: SuspendStatus) -> VideoStatus:
-        suspend_status.remove_suspend_by(self.by)
+        _ = suspend_status.remove_suspend_by(self.by)
         if suspend_status.should_unsuspend():
             return PlayStatus.from_status(suspend_status)
         return suspend_status
@@ -130,6 +139,7 @@ class UnsuspendClientCommand(StatusChangeClientCommand):
 class PlayClientCommand(StatusChangeClientCommand):
     prefix: str = "pl"
 
+    @override
     def handle_status_pause(self, pause_status: PauseStatus) -> VideoStatus:
         return PlayStatus.from_status(pause_status).set_time(self.video_time)
 
@@ -138,6 +148,7 @@ class PlayClientCommand(StatusChangeClientCommand):
 class PauseClientCommand(StatusChangeClientCommand):
     prefix: str = "pa"
 
+    @override
     def handle_status_play(self, play_status: PlayStatus) -> VideoStatus:
         return PauseStatus.from_status(play_status).set_time(self.video_time)
 
@@ -146,20 +157,21 @@ class PauseClientCommand(StatusChangeClientCommand):
 class StatusChangeServerCommand(ServerCommand):
     video_time: float
 
+    @override
     def to_string(self) -> str:
         return f"{self.prefix} {self.video_time}"
 
 
 class PlayServerCommand(StatusChangeServerCommand):
-    prefix = "pl"
+    prefix: str = "pl"
 
 
 class PauseServerCommand(StatusChangeServerCommand):
-    prefix = "pl"
+    prefix: str = "pl"
 
 
 class SuspendServerCommand(StatusChangeServerCommand):
-    prefix = "pl"
+    prefix: str = "pl"
 
 
 class CommandTypeHandler(ABC):
@@ -169,30 +181,51 @@ class CommandTypeHandler(ABC):
     def handle(self, cmd: ClientCommand): ...
 
 
-status_to_cmd: dict[type[VideoStatus], type["StatusChangeServerCommand"]] = {
+statuses_to_cmds: dict[type[VideoStatus], type["StatusChangeServerCommand"]] = {
     PlayStatus: PlayServerCommand,
     PauseStatus: PauseServerCommand,
     SuspendStatus: SuspendServerCommand,
 }
 
 
+def status_to_server_cmd(status: VideoStatus) -> type[StatusChangeServerCommand]:
+    server_cmd = statuses_to_cmds.get(status.__class__)
+    if server_cmd is None:
+        raise RuntimeError(
+            f"Can't find mapping of {status.__class__} status to server command!"
+        )
+    return server_cmd
+
+
+StatusChangeNotify = Callable[[VideoStatus], None]
+
 @dataclass
 class StatusStorage(Logging):
     status: VideoStatus = field(default_factory=lambda: PauseStatus(0, 0))
+    nofity: list[StatusChangeNotify] = field(init=False, default_factory=list)
 
     def set_status(self, new_status: VideoStatus):
         self.status = new_status
+        for n in self.nofity:
+            n(new_status)
+    
+    def add_observer(self, notify: StatusChangeNotify):
+        self.nofity.append(notify)
+
+    def remove_observer(self, notify: StatusChangeNotify):
+        self.nofity.remove(notify)
 
     def from_current(self, new_status: type[VideoStatus]):
         self.status = new_status.from_status(self.status)
 
     def to_server_command(self) -> StatusChangeServerCommand:
-        return status_to_cmd[self.status.__class__](video_time=self.status.video_time)
+        server_cmd = status_to_server_cmd(self.status)
+        return server_cmd(video_time=self.status.video_time)
 
     @classmethod
-    def from_mode(cls, model: RoomModel) -> 'StatusStorage':
+    def from_model(cls, model: RoomModel) -> "StatusStorage":
         return cls(PauseStatus(model.last_watch_ts, model.last_file_ind))
-    
+
     def update_model(self, model: RoomModel) -> RoomModel:
         model.last_file_ind = self.status.current_file_ind
         model.last_watch_ts = self.status.video_time
@@ -200,12 +233,13 @@ class StatusStorage(Logging):
 
 
 class StatusChangeCommandsHandler(CommandTypeHandler):
-    handle_type = StateChangeClientCommand
+    handle_type: type[ClientCommand] = StateChangeClientCommand
 
     def __init__(self, status_storage: StatusStorage) -> None:
         super().__init__()
-        self.status_storage = status_storage
+        self.status_storage: StatusStorage = status_storage
 
+    @override
     def handle(self, cmd: ClientCommand):
         if not isinstance(cmd, StateChangeClientCommand):
             raise TypeError(f"{self} can't handle {cmd}!")
@@ -216,8 +250,8 @@ class StatusChangeCommandsHandler(CommandTypeHandler):
         self.status_storage.set_status(cmd.handle_status(self.status_storage.status))
 
 
-class AllCommandsHandler(CommandTypeHandler):
-    handle_type = ClientCommand
+class CommandsGroupHandler(CommandTypeHandler):
+    handle_type: type[ClientCommand] = ClientCommand
 
     def __init__(self, handlers_to_reg: Iterable[CommandTypeHandler]) -> None:
         super().__init__()
@@ -231,6 +265,7 @@ class AllCommandsHandler(CommandTypeHandler):
                 return handler
         raise RuntimeError(f"Can not find handler for {cmd} command!")
 
+    @override
     def handle(self, cmd: ClientCommand):
         handler = self.match_cmd_handler(cmd)
         handler.handle(cmd)
@@ -265,13 +300,13 @@ class ConnectionsManager:
         conn = self.conns[conn_id]
         await conn.send(cmd)
 
-    def add_connection(self, conn: Connection):
+    def add_connection(self, conn: Connection) -> int:
         conn_id = next(self.conn_id_iter)
         self.conns[conn_id] = conn
         return conn_id
 
-    async def remove_connection(self, conn_id: int):
-        self.conns.pop(conn_id)
+    def remove_connection(self, conn_id: int):
+        _ = self.conns.pop(conn_id)
 
     async def send_room(self, cmd: ServerCommand, exclude: list[int] | None = None):
         exclude = exclude or []
@@ -287,13 +322,16 @@ class RoomInfo:
     img_link: str
 
 
-class RoomState:
-    def __init__(self, status_storage: StatusStorage) -> None:
-        self.status_storage = status_storage
-        self.cmd_handler = AllCommandsHandler(
-            (StatusChangeCommandsHandler(self.status_storage),)
-        )
-        self.conn_manager = ConnectionsManager()
+class RoomStateHandler:
+    def __init__(
+        self,
+        status_storage: StatusStorage,
+        cmd_handler: CommandsGroupHandler,
+        conn_manager: ConnectionsManager,
+    ) -> None:
+        self.status_storage: StatusStorage = status_storage
+        self.cmd_handler: CommandsGroupHandler = cmd_handler
+        self.conn_manager: ConnectionsManager = conn_manager
 
     async def send_status_update(self):
         await self.conn_manager.send_room(self.status_storage.to_server_command())
@@ -317,17 +355,93 @@ class RoomState:
         await self.send_status_update()
         return conn_id
 
+    def remove_connection(self, conn_id: int):
+        self.conn_manager.remove_connection(conn_id)
 
-if __name__ == "__main__":
-    status_storage = StatusStorage()
-    cmd_handler = AllCommandsHandler((StatusChangeCommandsHandler(status_storage),))
-    print(f"Status: {status_storage.status}")
-    cmd_handler.handle_str_cmd("pl 10", 0)
-    print(f"Status: {status_storage.status}")
-    print(f"Time: {status_storage.status.video_time}")
-    cmd_handler.handle_str_cmd("sp 20", 0)
-    print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")
-    cmd_handler.handle_str_cmd("pl 10", 0)
-    print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")
-    cmd_handler.handle_str_cmd("cf 4", 0)
-    print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")
+
+@dataclass
+class Room:
+    room_id: UUID
+    name: str
+    img_link: str
+    status_storage: StatusStorage
+    video_source: VideoSource
+    room_state_handler: RoomStateHandler = field(init=False)
+
+    def __post_init__(self):
+        cmd_handler = CommandsGroupHandler(
+            (StatusChangeCommandsHandler(self.status_storage),)
+        )
+        conn_manager = ConnectionsManager()
+        self.room_state_handler = RoomStateHandler(
+            self.status_storage, cmd_handler, conn_manager
+        )
+
+    @classmethod
+    def from_model(cls, model: RoomModel) -> "Room":
+        return cls(
+            room_id=model.room_id,
+            name=model.name,
+            img_link=model.img_link,
+            status_storage=StatusStorage.from_model(model),
+            video_source=VideoSource.from_model(model),
+        )
+
+    def update_model(self, model: RoomModel):
+        model.name = self.name
+        model.img_link = self.img_link
+        _ = self.status_storage.update_model(model)
+        _ = self.video_source.update_model(model)
+
+    async def add_connection(self, conn: Connection) -> int:
+        conn_id = await self.room_state_handler.add_connection(conn)
+        self.room_state_handler.set_status_from_current(SuspendStatus)
+        return conn_id
+
+    async def remove_connection(self, conn_id: int):
+        self.room_state_handler.remove_connection(conn_id)
+
+    async def handle_cmd_str(self, cmd_str: str, by: int):
+        await self.room_state_handler.handle_cmd_str(cmd_str, by)
+        _ = self.video_source.set_file_index(
+            self.status_storage.status.current_file_ind
+        )
+
+
+class RoomStorage:
+    def __init__(self) -> None:
+        self.lock: Lock = Lock()
+        self.loaded_rooms: dict[UUID, Room] = {}
+
+    async def load_room(self, session: AsyncSession, room_id: UUID):
+        room = await RoomModel.get_room_id(session, room_id)
+        self.loaded_rooms[room_id] = Room.from_model(room)
+
+    async def get_room(self, session: AsyncSession, room_id: UUID):
+        async with self.lock:
+            if room_id not in self.loaded_rooms:
+                await self.load_room(session, room_id)
+        return self.loaded_rooms[room_id]
+
+
+# def create_room():
+#     model = RoomModel(name="", video_source="src", video_source_data="", img_link="")
+#     status_storage = StatusStorage.from_model(model)
+#     cmd_handler = CommandsGroupHandler((StatusChangeCommandsHandler(status_storage),))
+#     conn_manager = ConnectionsManager()
+#     room_state_handler = RoomStateHandler(status_storage, cmd_handler, conn_manager)
+
+
+# if __name__ == "__main__":
+#     status_storage = StatusStorage()
+#     cmd_handler = CommandsGroupHandler((StatusChangeCommandsHandler(status_storage),))
+#     print(f"Status: {status_storage.status}")
+#     cmd_handler.handle_str_cmd("pl 10", 0)
+#     print(f"Status: {status_storage.status}")
+#     print(f"Time: {status_storage.status.video_time}")
+#     cmd_handler.handle_str_cmd("sp 20", 0)
+#     print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")
+#     cmd_handler.handle_str_cmd("pl 10", 0)
+#     print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")
+#     cmd_handler.handle_str_cmd("cf 4", 0)
+#     print(f"Status: {status_storage.status}, Time: {status_storage.status.video_time}")

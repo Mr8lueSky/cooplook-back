@@ -67,7 +67,7 @@ class RoomInfo(Logging):
         return self.video_source.get_player_src()
 
     async def handle_set_new_file(self, new_fi: int, ws_id: int) -> bool:
-        if not self.video_source.set_current_fi(new_fi):
+        if not self.video_source.set_file_index(new_fi):
             return False
         await self.send_room(Commands.change_file_cmd(new_fi), ws_id)
         await self.handle_play_pause(Commands.PAUSE, 0, -1)
@@ -198,17 +198,17 @@ class RoomInfo(Logging):
 
 
 async def retake_room(session: AsyncSession, room_id: UUID):
-    prev_room = rooms.pop(room_id, None)
-    if prev_room:
-        await prev_room.cleanup()
-    room_model = await RoomModel.get_room_id(session, room_id)
-    rooms[room_id] = RoomInfo.from_model(room_model)
+    async with lock:
+        prev_room = rooms.pop(room_id, None)
+        if prev_room:
+            await prev_room.cleanup()
+        room_model = await RoomModel.get_room_id(session, room_id)
+        rooms[room_id] = RoomInfo.from_model(room_model)
 
 
 async def get_room(session: AsyncSession, room_id: UUID) -> RoomInfo:
-    async with lock:
-        if room_id not in rooms:
-            await retake_room(session, room_id)
+    if room_id not in rooms:
+        await retake_room(session, room_id)
     return rooms[room_id]
 
 

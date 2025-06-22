@@ -2,42 +2,58 @@ import abc
 import os
 from asyncio import sleep
 from pathlib import Path
-from uuid import UUID
+from uuid import uuid1
 
-from fastapi.responses import FileResponse
+from fastapi import Response
+from fastapi.responses import RedirectResponse
 
 import config
 from custom_responses import LoadingTorrentFileResponse, TorrentManager
+from models.room_model import RoomModel, VideoSourcesEnum
+
 
 class VideoSource(abc.ABC):
-    def __init__(self, _: str, file_index: int, room_id: UUID) -> None:
-        super().__init__()
-        self.room_id: UUID | None = room_id
-        self.curr_fi = file_index
+    data_field: str
 
-    def get_player_src(self) -> str:
-        return f"/files/{self.room_id}"
+    def __init__(self, data: str, file_index: int) -> None:
+        super().__init__()
+        self.curr_fi = file_index
 
     @abc.abstractmethod
     def get_available_files(self) -> list[tuple[int, str]]: ...
 
     @abc.abstractmethod
-    def set_current_fi(self, fi: int) -> bool: ...
+    def set_file_index(self, fi: int) -> bool: ...
 
     def start(self): ...
-    
-    def cleanup(self): ...
 
     @abc.abstractmethod
     def cancel_current_requests(self): ...
 
+    def cleanup(self):
+        self.cancel_current_requests()
+
+    @classmethod
+    def from_model(cls, model: RoomModel) -> "VideoSource":
+        cls = enum_to_source.get(model.video_source)
+        if cls is None:
+            raise RuntimeError(f"Unknown source: {cls}")
+        return cls(model.video_source_data, model.last_file_ind)
+
+    def update_model(self, model: RoomModel) -> RoomModel:
+        model.video_source = source_to_enum[self.__class__]
+        model.video_source_data = getattr(self, self.data_field)
+        return model
+
     @abc.abstractmethod
-    async def get_video_response(self, request) -> FileResponse: ...
+    async def get_video_response(self, request) -> Response: ...
 
 
 class HttpLinkVideoSource(VideoSource):
-    def __init__(self, link: str, _: int, room_id: UUID):
-        super().__init__("", 0, room_id)
+    data_field = "link"
+
+    def __init__(self, link: str, file_index: int) -> None:
+        super().__init__(link, file_index)
         self.link = link
 
     def get_player_src(self, *_, **__) -> str:
@@ -46,41 +62,46 @@ class HttpLinkVideoSource(VideoSource):
     def get_available_files(self) -> list[tuple[int, str]]:
         return [(0, self.link)]
 
-    def set_current_fi(self, fi: int) -> bool:
+    def set_file_index(self, fi: int) -> bool:
         return False
 
     def cancel_current_requests(self): ...
 
-    def get_video_response(self, request):
-        raise AttributeError("Don't need to be implemented")
+    async def get_video_response(self, request) -> RedirectResponse:
+        return RedirectResponse(self.link, 303)
 
 
 class TorrentVideoSource(VideoSource):
     SAVE_PATH: Path = config.TORRENT_SAVE_PATH
+    data_field = "torrent"
 
-    def __init__(self, torrent: bytes | str, file_index: int, room_id: UUID):
-        super().__init__("", file_index, room_id)
+    def __init__(
+        self,
+        torrent: str,
+        file_index: int,
+    ):
+        super().__init__("", file_index)
         self.torrent = torrent
         self.tm = TorrentManager(self.torrent, self.curr_fi, self.save_path)
         self.resps: list[LoadingTorrentFileResponse] = []
+        self.folder_id = uuid1()
         os.makedirs(self.SAVE_PATH, exist_ok=True)
 
     @property
     def save_path(self) -> str:
-        if self.room_id is None:
-            raise AttributeError("Room id is not set!")
-        return str(self.SAVE_PATH / str(self.room_id))
+        return str(self.SAVE_PATH / str(self.folder_id))
 
-    def set_current_fi(self, fi: int) -> bool:
+    def set_file_index(self, fi: int) -> bool:
         """Returns is file changed or not"""
         if fi == self.curr_fi:
             return False
-        self.tm.set_new_fi(fi)
+        self.tm.set_file_index(fi)
         self.curr_fi = fi
         self.tm.initiate_torrent_download()
         return True
-    
+
     def cleanup(self):
+        super().cleanup()
         self.tm.cleanup()
 
     def start(self):
@@ -108,3 +129,12 @@ class TorrentVideoSource(VideoSource):
         return r
 
 
+enum_to_source: dict[VideoSourcesEnum, type[VideoSource]] = {
+    VideoSourcesEnum.torrent: TorrentVideoSource,
+    VideoSourcesEnum.link: HttpLinkVideoSource,
+}
+
+source_to_enum = {
+    TorrentVideoSource: VideoSourcesEnum.torrent,
+    HttpLinkVideoSource: VideoSourcesEnum.link,
+}
