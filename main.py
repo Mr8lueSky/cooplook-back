@@ -1,7 +1,7 @@
 import json
 import logging
-from collections import defaultdict
 import os
+from collections import defaultdict
 from string import ascii_lowercase, ascii_uppercase
 from typing import Annotated
 from uuid import UUID, uuid1
@@ -151,9 +151,12 @@ async def create_room_torrent(
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
 
 
-@app.get("/files/{room_id}")
+@app.get("/files/{room_id}/{fi}")
 async def get_video_file(
-    room_id: UUID, request: Request, _: GetUserSchema = Depends(current_user)
+    room_id: UUID,
+    request: Request,
+    fi: int = 0,
+    _: GetUserSchema = Depends(current_user),
 ) -> FileResponse:
     async with async_session_maker.begin() as session:
         room = await get_room(session, room_id)
@@ -300,7 +303,6 @@ async def logout():
     resp = RedirectResponse("/login", 303)
     resp.delete_cookie("token")
     return resp
-
 
 @app.get("/")
 async def index() -> RedirectResponse:

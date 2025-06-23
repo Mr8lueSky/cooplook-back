@@ -13,6 +13,7 @@ let suspend = false;
 let initial = true;
 let waiting = true;
 let last_ts = 0;
+let fi = 0;
 
 let ignorePlay = 0;
 let ignorePause = 0;
@@ -55,6 +56,7 @@ let setCurrTime = (currentTime) => {
 
 function reloadVideo() {
 	console.log("Reloading video!")
+	videoElem.src = `/files/${room_id}/${fi}`
         videoElem.load();
         videoElem.currentTime = 0;
 }
@@ -62,6 +64,7 @@ function reloadVideo() {
 
 let selectFile = () => {
         let newFile = selectFileElem.value;
+	fi = selectFile.value;
         console.log(`Selecting file ${newFile}!`)
         sendCommand(CHANGE_FILE, newFile)
         reloadVideo()
@@ -166,6 +169,7 @@ let createSocket = () => {
                         // peopleCountElem.textContent = arg;
                         return;
                 } else if (cmd == CHANGE_FILE) {
+			fi = arg;
                         reloadVideo();
                         selectFileElem.selectedIndex = arg;
                         return;
@@ -223,6 +227,9 @@ let updateRoom = async () => {
 videoElem.addEventListener("playing", () => {
         // console.log("Set status PLAY from playing event")
         // setStatus(PLAY, send = true)
+})
+videoElem.addEventListener("error", (e) => {
+	console.error(e);
 })
 
 videoElem.addEventListener("waiting", () => {

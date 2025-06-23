@@ -350,8 +350,7 @@
                                 </div>
 
                                 <p id="video-alert"></p>
-                                <video id="main-video" controls>
-                                        <source src="{{ room.video }}">
+				<video id="main-video" controls src="{{ room.video }}/{{ room.curr_fi }}">
                                         Your browser does not support the video tag.
                                 </video>
                         </div>
@@ -457,8 +456,9 @@
                         videoOptions.forEach(option => {
                                 option.addEventListener('click', function(e) {
                                         e.preventDefault();
-                                        const fi = option.getAttribute("value");
-                                        sendCommand(CHANGE_FILE, fi)
+                                        const new_fi = option.getAttribute("value");
+                                        sendCommand(CHANGE_FILE, new_fi)
+					fi = new_fi;
 					reloadVideo()
                                         // Обновляем название комнаты
                                         document.querySelector('.video-title').textContent = this.textContent
