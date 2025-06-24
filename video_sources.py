@@ -2,9 +2,10 @@ import abc
 import os
 from asyncio import sleep
 from pathlib import Path
-from uuid import uuid1
+from typing import override
+from uuid import UUID, uuid1
 
-from fastapi import Response
+from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 import config
@@ -73,7 +74,8 @@ class HttpLinkVideoSource(VideoSource):
 
 class TorrentVideoSource(VideoSource):
     SAVE_PATH: Path = config.TORRENT_SAVE_PATH
-    data_field = "torrent"
+    data_field: str = "torrent"
+    enum: VideoSourcesEnum = VideoSourcesEnum.torrent
 
     def __init__(
         self,
@@ -81,16 +83,17 @@ class TorrentVideoSource(VideoSource):
         file_index: int,
     ):
         super().__init__("", file_index)
-        self.torrent = torrent
+        self.folder_id: UUID = uuid1()
+        os.makedirs(self.save_path, exist_ok=True)
+        self.torrent: str = torrent
         self.tm = TorrentManager(self.torrent, self.curr_fi, self.save_path)
         self.resps: list[LoadingTorrentFileResponse] = []
-        self.folder_id = uuid1()
-        os.makedirs(self.SAVE_PATH, exist_ok=True)
 
     @property
     def save_path(self) -> str:
         return str(self.SAVE_PATH / str(self.folder_id))
 
+    @override
     def set_file_index(self, fi: int) -> bool:
         """Returns is file changed or not"""
         if fi == self.curr_fi:
@@ -100,23 +103,28 @@ class TorrentVideoSource(VideoSource):
         self.tm.initiate_torrent_download()
         return True
 
+    @override
     def cleanup(self):
         super().cleanup()
         self.tm.cleanup()
 
+    @override
     def start(self):
         os.makedirs(self.save_path, exist_ok=True)
         self.tm.initiate_torrent_download()
 
+    @override
     def cancel_current_requests(self):
         for r in self.resps:
             r.cancel()
         self.resps.clear()
-
+    
+    @override
     def get_available_files(self) -> list[tuple[int, str]]:
         return self.tm.get_all_filenames()
-
-    async def get_video_response(self, request) -> LoadingTorrentFileResponse:
+    
+    @override
+    async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:
         file_path = self.tm.get_current_filepath()
         while not os.path.isfile(file_path):
             await sleep(0)

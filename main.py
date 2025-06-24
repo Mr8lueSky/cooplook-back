@@ -7,18 +7,19 @@ from typing import Annotated
 from uuid import UUID, uuid1
 
 import anyio
-from fastapi import Depends, FastAPI, Form, Path, Request, Response, WebSocket
+from fastapi import (Depends, FastAPI, Form, Path, Request, Response,
+                     WebSocket, WebSocketDisconnect)
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from auth import current_user, generate_token
 from config import ENV, TORRENT_FILES_SAVE_PATH
+from connections import Connection
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
-from room_info import delete_room, get_room, monitor_rooms, retake_room
+from room import RoomStorage
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema, UpdateSourceToLink,
@@ -30,7 +31,7 @@ from video_sources import HttpLinkVideoSource, TorrentVideoSource
 app = FastAPI()
 
 app.add_event_handler("startup", create_all)
-app.add_event_handler("startup", monitor_rooms)
+# app.add_event_handler("startup", monitor_rooms)
 app.add_event_handler("startup", create_users)
 
 app.mount("/static", StaticFiles(directory="static"))
@@ -78,25 +79,19 @@ def handle_validation_error(r: Request, exc: RequestValidationError):
 
 
 if ENV == "DEV":
-    random = False
-
-    if random:
-        TORRENT_ROOM_UUID = uuid1()
-        VIDEO_ROOM_UUID = uuid1()
-    else:
-        TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
-        VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
+    TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
+    VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
 
     @app.get("/rooms/{room_id}/stats")
     async def get_stats(room_id: UUID):
         async with async_session_maker.begin() as session:
-            room = await get_room(session, room_id)
+            room = await RoomStorage.get_room(session, room_id)
             return JSONResponse(json.dumps(room, default=lambda o: str(o)))
 
     @app.get("/priorities/{room_id}")
     async def get_priorities(room_id: UUID):
         async with async_session_maker.begin() as session:
-            r = await get_room(session, room_id)
+            r = await RoomStorage.get_room(session, room_id)
             if not isinstance(r.video_source, TorrentVideoSource):
                 return JSONResponse({"error": "Is not torrent"}, 422)
             if r.video_source.tm.th is None:
@@ -109,7 +104,7 @@ if ENV == "DEV":
     @app.get("/have/{piece_id}/{room_id}")
     async def have_piece(piece_id: int, room_id: UUID):
         async with async_session_maker.begin() as session:
-            vs = (await get_room(session, room_id)).video_source
+            vs = (await RoomStorage.get_room(session, room_id)).video_source
             if not isinstance(vs, TorrentVideoSource):
                 return JSONResponse({"error": "not a torrent"}, 422)
             if not vs.tm or not vs.tm.th:
@@ -143,7 +138,7 @@ async def create_room_torrent(
         r = await RoomModel.create(
             session,
             room.name,
-            TorrentVideoSource,
+            TorrentVideoSource.enum,
             torrent_fpth.as_posix(),
             room.img_link,
         )
@@ -151,19 +146,19 @@ async def create_room_torrent(
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
 
 
-@app.get("/files/{room_id}")
+@app.get("/files/{room_id}/{fi}")
 async def get_video_file(
-    room_id: UUID, request: Request, _: GetUserSchema = Depends(current_user)
+    room_id: UUID, fi: int, request: Request, _: GetUserSchema = Depends(current_user)
 ) -> Response:
     async with async_session_maker.begin() as session:
-        room = await get_room(session, room_id)
+        room = await RoomStorage.get_room(session, room_id)
     return await room.video_source.get_video_response(request)
 
 
 @app.delete("/rooms/{room_id}")
 async def delete_room_end(room_id: UUID, _: GetUserSchema = Depends(current_user)):
     async with async_session_maker.begin() as session:
-        await delete_room(session, room_id)
+        await RoomStorage.delete_room(session, room_id)
     return RedirectResponse("/rooms/", 303)
 
 
@@ -186,12 +181,12 @@ async def update_source_to_torrent(
             room_id,
             last_watch_ts=0,
             last_file_ind=0,
-            vs_cls=TorrentVideoSource,
+            vs_enum=TorrentVideoSource,
             name=room.name or None,
             img_link=room.img_link or None,
             video_source_data=torrent_fpth or None,
         )
-        await retake_room(session, room_id)
+        await RoomStorage.load_room(session, room_id, ignore_if_loaded=False)
         return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
@@ -207,12 +202,12 @@ async def update_source_to_link(
             room_id,
             last_watch_ts=0,
             last_file_ind=0,
-            vs_cls=HttpLinkVideoSource,
+            vs_enum=HttpLinkVideoSource,
             name=room.name or None,
             img_link=room.img_link or None,
             video_source_data=room.video_link or None,
         )
-        await retake_room(session, room_id)
+        await RoomStorage.load_room(session, room_id, ignore_if_loaded=False)
         return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
@@ -222,14 +217,10 @@ async def inside_room(
     _: GetUserSchema = Depends(current_user),
 ) -> HTMLResponse:
     async with async_session_maker.begin() as session:
-        room_info = await get_room(session, room_id)
+        room = await RoomStorage.get_room(session, room_id)
         return get_template_response(
             "room",
-            {
-                "room": GetRoomWatchingSchema.model_validate(
-                    room_info, from_attributes=True
-                )
-            },
+            {"room": GetRoomWatchingSchema.model_validate(room, from_attributes=True)},
         )
 
 
@@ -284,8 +275,22 @@ async def syncing(
     _: GetUserSchema = Depends(current_user),
 ):
     async with async_session_maker.begin() as session:
-        room = await get_room(session, room_id)
-    await room.handle_client(websocket)
+        room = await RoomStorage.get_room(session, room_id)
+    conn = Connection(websocket)
+    conn_id = await room.add_connection(conn)
+    while True:  # TODO: while app is working
+        try:
+            msg = await websocket.receive_text()
+            logger.debug(f"Recieved {msg} from {conn_id}")
+            await room.handle_cmd_str(msg, conn_id)
+            async with async_session_maker.begin() as session:
+                await RoomStorage.save_room(session, room_id)
+        except WebSocketDisconnect:
+            logger.error(f"{conn_id} disconnected!")
+            break
+        except Exception as exc:
+            logger.error(f"Got an error from {conn_id}: {type(exc)} {exc}")
+    await room.remove_connection(conn_id)
 
 
 @app.get("/logout")

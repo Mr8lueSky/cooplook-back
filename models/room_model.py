@@ -7,7 +7,6 @@ from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
 from exceptions import BadRequest, NotFound
 from models.base import BaseModel
-from video_sources import VideoSource
 
 
 class VideoSourcesEnum(str, Enum):
@@ -62,7 +61,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         last_watch_ts: float | None = None,
         last_file_ind: int | None = None,
         name: str | None = None,
-        vs_cls: type[VideoSource] | None = None,
+        vs_enum: VideoSourcesEnum | None = None,
         video_source_data: str | None = None,
         img_link: str | None = None,
     ):
@@ -73,8 +72,8 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["last_file_ind"] = last_file_ind
         if name is not None:
             values["name"] = name
-        if vs_cls is not None and video_source_data is not None:
-            values["video_source"] = source_to_enum[vs_cls]
+        if vs_enum is not None and video_source_data is not None:
+            values["video_source"] = vs_enum
             values["video_source_data"] = video_source_data
         if img_link is not None:
             values["img_link"] = img_link
@@ -92,17 +91,15 @@ class RoomModel(MappedAsDataclass, BaseModel):
         cls,
         session: AsyncSession,
         name: str,
-        vs_cls: type[VideoSource],
+        vs_enum: VideoSourcesEnum,
         vs_data: str,
         img_link: str,
     ) -> "RoomModel":
-        if vs_cls not in source_to_enum:
-            raise NotFound("Video source not found: {vs_cls}")
         if await cls.exists_with_name(session, name):
             raise BadRequest("Room with same name already exists!")
         rm = RoomModel(
             name=name,
-            video_source=source_to_enum[vs_cls],
+            video_source=vs_enum,
             video_source_data=vs_data,
             img_link=img_link,
         )

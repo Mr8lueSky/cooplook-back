@@ -1,5 +1,6 @@
 from asyncio import Lock
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from config import DB_URL, ENV
@@ -31,9 +32,12 @@ async def create_users():
     if ENV == "DEV":
         async with async_session_maker.begin() as ses:
             user = LoginUserSchema(name="admin", password="12345678")
-            await UserModel.create(
-                ses,
-                user.name,
-                user.hash_password(),
-                user.salt
-            )
+            try:
+                _ = await UserModel.create(
+                    ses,
+                    user.name,
+                    user.hash_password(),
+                    user.salt
+                )
+            except IntegrityError:
+                ...
