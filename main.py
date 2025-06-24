@@ -1,8 +1,8 @@
 import json
 import logging
 import os
-from collections import defaultdict
-from string import ascii_lowercase, ascii_uppercase
+from string import ascii_lowercase, ascii_uppercase, digits
+from traceback import format_exc
 from typing import Annotated
 from uuid import UUID, uuid1
 
@@ -19,7 +19,7 @@ from connections import Connection
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
-from room import RoomStorage
+from room import RoomStorage, monitor_rooms
 from schemas.room_schemas import (CreateRoomLinkSchema,
                                   CreateRoomTorrentSchema, GetRoomSchema,
                                   GetRoomWatchingSchema, UpdateSourceToLink,
@@ -31,20 +31,21 @@ from video_sources import HttpLinkVideoSource, TorrentVideoSource
 app = FastAPI()
 
 app.add_event_handler("startup", create_all)
-# app.add_event_handler("startup", monitor_rooms)
+app.add_event_handler("startup", monitor_rooms)
 app.add_event_handler("startup", create_users)
+app.add_event_handler("shutdown", RoomStorage.full_cleanup)
 
 app.mount("/static", StaticFiles(directory="static"))
 
 logger = logging.getLogger(__name__)
 
-allowed_alert_table = defaultdict(lambda: ord("|"))
+allowed_alert_table: dict[int, int] = {}
 
-for char in ascii_lowercase + ascii_uppercase + " :-._[]":
-    allowed_alert_table[ord(char)] = ord(char)
+for char in ascii_lowercase + ascii_uppercase + " :-._[]" + digits:
+    allowed_alert_table[ord(char)] = ord("|")
 
 
-def format_exc_msg(msg: str):
+def format_exc_msg(msg: str) -> str:
     return msg.translate(allowed_alert_table).replace("|", "")
 
 
@@ -52,10 +53,11 @@ def format_exc_msg(msg: str):
 def handle_http_exception(r: Request, exc: HTTPException):
     if exc.html:
         resp = RedirectResponse(".", 303)
+        exceptions: list[str] = []
         try:
             exceptions = json.loads(r.cookies.get("exc", "[]"))
         except Exception:
-            exceptions = []
+            ...
         exceptions.append(format_exc_msg(exc.msg))
         resp.set_cookie("exc", json.dumps(exceptions))
         return resp
@@ -67,10 +69,11 @@ def handle_http_exception(r: Request, exc: HTTPException):
 @app.exception_handler(RequestValidationError)
 def handle_validation_error(r: Request, exc: RequestValidationError):
     resp = RedirectResponse(".", 303)
+    exceptions: list[str] = []
     try:
         exceptions = json.loads(r.cookies.get("exc", "[]"))
     except Exception:
-        exceptions = []
+        ...
     exceptions.extend(
         format_exc_msg(".".join(err["loc"]) + ": " + err["msg"]) for err in exc.errors()
     )
@@ -119,7 +122,7 @@ async def create_room_link(
 ) -> Response:
     async with async_session_maker.begin() as session:
         r = await RoomModel.create(
-            session, room.name, HttpLinkVideoSource, room.video_link, room.img_link
+            session, room.name, HttpLinkVideoSource.enum, room.video_link, room.img_link
         )
         return RedirectResponse(f"/rooms/{r.room_id}", 303)
 
@@ -181,7 +184,7 @@ async def update_source_to_torrent(
             room_id,
             last_watch_ts=0,
             last_file_ind=0,
-            vs_enum=TorrentVideoSource,
+            vs_enum=TorrentVideoSource.enum,
             name=room.name or None,
             img_link=room.img_link or None,
             video_source_data=torrent_fpth or None,
@@ -202,7 +205,7 @@ async def update_source_to_link(
             room_id,
             last_watch_ts=0,
             last_file_ind=0,
-            vs_enum=HttpLinkVideoSource,
+            vs_enum=HttpLinkVideoSource.enum,
             name=room.name or None,
             img_link=room.img_link or None,
             video_source_data=room.video_link or None,
@@ -288,8 +291,12 @@ async def syncing(
         except WebSocketDisconnect:
             logger.error(f"{conn_id} disconnected!")
             break
+        except RuntimeError:
+            break
         except Exception as exc:
-            logger.error(f"Got an error from {conn_id}: {type(exc)} {exc}")
+            logger.error(
+                f"Got an error from {conn_id}: {type(exc)} {exc}\n{format_exc()}"
+            )
     await room.remove_connection(conn_id)
 
 

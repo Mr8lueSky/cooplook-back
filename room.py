@@ -1,3 +1,5 @@
+import asyncio
+import time
 from asyncio import Lock
 from uuid import UUID
 
@@ -5,9 +7,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from commands.command_handlers import (CommandsGroupHandler,
                                        StatusChangeCommandsHandler)
+from commands.server_commands import FileChangeCommand, ServerCommand
+from config import ROOM_INACTIVITY_PERIOD
 from connections import Connection, ConnectionsManager
 from exceptions import NotFound
-from logger import create_logger
+from logger import Logging, create_logger
 from models.room_model import RoomModel
 from video_sources import VideoSource
 from video_status.status_storage import StatusStorage
@@ -16,7 +20,7 @@ from video_status.video_statuses import PauseStatus, SuspendStatus, VideoStatus
 monitor_logger = create_logger("RoomMonitor")
 
 
-class RoomStateHandler:
+class RoomStateHandler(Logging):
     def __init__(
         self,
         status_storage: StatusStorage,
@@ -39,6 +43,10 @@ class RoomStateHandler:
             self.cmd_handler.handle_str_cmd(cmd_str, by)
             await self.send_status_update()
 
+    async def send_cmd(self, cmd: ServerCommand, exclude_id: list[int] | None = None):
+        exclude_id = exclude_id or []
+        await self.conn_manager.send_room(cmd, exclude_id)
+
     def set_status(self, new_status: VideoStatus):
         self.status_storage.set_status(new_status)
 
@@ -55,19 +63,31 @@ class RoomStateHandler:
         await self.send_status_update()
         return conn_id
 
-    def remove_connection(self, conn_id: int):
+    async def send_change_file(self):
+        await self.conn_manager.send_room(
+            FileChangeCommand(self.status_storage.current_file_ind)
+        )
+
+    async def remove_connection(self, conn_id: int):
         self.conn_manager.remove_connection(conn_id)
         curr_status = self.status_storage.status
         if isinstance(curr_status, SuspendStatus):
             _ = curr_status.remove_suspend_by(conn_id)
             if curr_status.should_unsuspend():
                 _ = self.status_storage.from_current(PauseStatus)
+        else:
+            _ = self.status_storage.from_current(PauseStatus)
+        await self.send_status_update()
 
     async def cleanup(self): ...
 
     @property
     def current_status(self) -> VideoStatus:
         return self.status_storage.status
+
+    @property
+    def people_inside(self):
+        return self.conn_manager.conn_count()
 
 
 class Room:
@@ -90,6 +110,7 @@ class Room:
         self.room_state_handler: RoomStateHandler = RoomStateHandler(
             status_storage, cmd_handler, conn_manager
         )
+        self.last_leave: float = time.time()
 
     @classmethod
     def from_model(cls, model: RoomModel) -> "Room":
@@ -112,12 +133,14 @@ class Room:
         return conn_id
 
     async def remove_connection(self, conn_id: int):
-        self.room_state_handler.remove_connection(conn_id)
+        await self.room_state_handler.remove_connection(conn_id)
+        self.last_leave = time.time()
 
     async def handle_cmd_str(self, cmd_str: str, by: int):
         await self.room_state_handler.handle_cmd_str(cmd_str, by)
         status = self.room_state_handler.current_status
-        _ = self.video_source.set_file_index(status.current_file_ind)
+        if self.video_source.set_file_index(status.current_file_ind):
+            await self.room_state_handler.send_change_file()
 
     async def cleanup(self):
         self.video_source.cleanup()
@@ -132,8 +155,15 @@ class Room:
         return self.video_source.curr_fi
 
     @property
+    def people_inside(self):
+        return self.room_state_handler.people_inside
+
+    @property
     def video(self):
         return f"/files/{self.room_id}/{self.curr_fi}"
+
+
+room_st_logger = create_logger("RoomStorage")
 
 
 class RoomStorage:
@@ -152,6 +182,12 @@ class RoomStorage:
             cls.loaded_rooms[room_id].video_source.start()
 
     @classmethod
+    async def unload_room(cls, room_id: UUID):
+        room_st_logger.debug(f"Unloading room {room_id}")
+        room = cls.loaded_rooms.pop(room_id)
+        await room.cleanup()
+
+    @classmethod
     async def get_room(cls, session: AsyncSession, room_id: UUID) -> Room:
         await cls.load_room(session, room_id)
         room = cls.loaded_rooms.get(room_id)
@@ -165,6 +201,7 @@ class RoomStorage:
 
     @classmethod
     async def delete_room(cls, session: AsyncSession, room_id: UUID):
+        room_st_logger.debug(f"Deleting room {room_id}")
         if cls.is_room_loaded(room_id):
             room = await cls.get_room(session, room_id)
             await room.cleanup()
@@ -174,30 +211,31 @@ class RoomStorage:
         room_model = await RoomModel.get_room_id(session, room_id)
         (await cls.get_room(session, room_id)).update_model(room_model)
 
+    @classmethod
+    async def full_cleanup(cls):
+        room_st_logger.debug("Cleaning up all rooms")
+        _ = await asyncio.gather(
+            *(cls.unload_room(room_id) for room_id in cls.loaded_rooms.keys())
+        )
 
-#
-# async def _monitor_rooms():
-#     while True:
-#         await asyncio.sleep(60)
-#         monitor_logger.info("Starting room cleanup")
-#         for room_id, room in tuple(rooms.items()):
-#             async with lock:
-#                 if (
-#                     len(room.wss)
-#                     or time() - room.last_leave_ts < ROOM_INACTIVITY_PERIOD
-#                 ):
-#                     monitor_logger.debug(
-#                         f"Skipping room {room_id}. "
-#                         f"Time from last leave: {time() - room.last_leave_ts}, "
-#                         f"people count: {len(room.wss)}"
-#                     )
-#                     continue
-#                 room = rooms.pop(room_id)
-#             await room.cleanup()
-#             monitor_logger.debug(f"Cleaned room {room_id}")
-#             await asyncio.sleep(0)
-#         monitor_logger.info("Room cleanup finished")
-#
-#
-# async def monitor_rooms():
-#     asyncio.create_task(_monitor_rooms())
+    @classmethod
+    async def remove_inactive(cls):
+        room_st_logger.debug("Cleaning up inactive rooms")
+        _ = await asyncio.gather(
+            *(
+                cls.unload_room(room_id)
+                for room_id, room in cls.loaded_rooms.items()
+                if not room.people_inside
+                and time.time() - room.last_leave >= ROOM_INACTIVITY_PERIOD
+            )
+        )
+
+
+async def _monitor_rooms():
+    while True:
+        await asyncio.sleep(60)
+        await RoomStorage.remove_inactive()
+
+
+async def monitor_rooms():
+    _ = asyncio.create_task(_monitor_rooms())

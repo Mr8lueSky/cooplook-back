@@ -11,7 +11,7 @@ class ServerCommand(ABC):
 
 
 @dataclass
-class StatusChangeServerCommand(ServerCommand):
+class StatusChangeServerCommand(ServerCommand, ABC):
     video_time: float
 
     @override
@@ -29,3 +29,13 @@ class PauseServerCommand(StatusChangeServerCommand):
 
 class SuspendServerCommand(StatusChangeServerCommand):
     prefix: str = "sp"
+
+
+@dataclass
+class FileChangeCommand(ServerCommand):
+    fi: int
+    prefix: str = "cf"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {self.fi}"

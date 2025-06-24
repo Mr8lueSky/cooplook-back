@@ -15,10 +15,11 @@ from models.room_model import RoomModel, VideoSourcesEnum
 
 class VideoSource(abc.ABC):
     data_field: str
+    enum: VideoSourcesEnum
 
     def __init__(self, data: str, file_index: int) -> None:
         super().__init__()
-        self.curr_fi = file_index
+        self.curr_fi: int = file_index
 
     @abc.abstractmethod
     def get_available_files(self) -> list[tuple[int, str]]: ...
@@ -42,33 +43,35 @@ class VideoSource(abc.ABC):
         return cls(model.video_source_data, model.last_file_ind)
 
     def update_model(self, model: RoomModel) -> RoomModel:
-        model.video_source = source_to_enum[self.__class__]
+        model.video_source = self.enum
         model.video_source_data = getattr(self, self.data_field)
         return model
 
     @abc.abstractmethod
-    async def get_video_response(self, request) -> Response: ...
+    async def get_video_response(self, request: Request) -> Response: ...
 
 
 class HttpLinkVideoSource(VideoSource):
-    data_field = "link"
+    data_field: str = "link"
+    enum: VideoSourcesEnum = VideoSourcesEnum.link
 
     def __init__(self, link: str, file_index: int) -> None:
         super().__init__(link, file_index)
-        self.link = link
+        self.link: str = link
 
-    def get_player_src(self, *_, **__) -> str:
-        return self.link
-
+    @override
     def get_available_files(self) -> list[tuple[int, str]]:
         return [(0, self.link)]
 
+    @override
     def set_file_index(self, fi: int) -> bool:
         return False
 
+    @override
     def cancel_current_requests(self): ...
 
-    async def get_video_response(self, request) -> RedirectResponse:
+    @override
+    async def get_video_response(self, request: Request) -> RedirectResponse:
         return RedirectResponse(self.link, 303)
 
 
@@ -86,7 +89,9 @@ class TorrentVideoSource(VideoSource):
         self.folder_id: UUID = uuid1()
         os.makedirs(self.save_path, exist_ok=True)
         self.torrent: str = torrent
-        self.tm = TorrentManager(self.torrent, self.curr_fi, self.save_path)
+        self.tm: TorrentManager = TorrentManager(
+            self.torrent, self.curr_fi, self.save_path
+        )
         self.resps: list[LoadingTorrentFileResponse] = []
 
     @property
@@ -99,7 +104,7 @@ class TorrentVideoSource(VideoSource):
         if fi == self.curr_fi:
             return False
         self.tm.set_file_index(fi)
-        self.curr_fi = fi
+        self.curr_fi: int = fi
         self.tm.initiate_torrent_download()
         return True
 
@@ -118,11 +123,11 @@ class TorrentVideoSource(VideoSource):
         for r in self.resps:
             r.cancel()
         self.resps.clear()
-    
+
     @override
     def get_available_files(self) -> list[tuple[int, str]]:
         return self.tm.get_all_filenames()
-    
+
     @override
     async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:
         file_path = self.tm.get_current_filepath()
@@ -140,9 +145,4 @@ class TorrentVideoSource(VideoSource):
 enum_to_source: dict[VideoSourcesEnum, type[VideoSource]] = {
     VideoSourcesEnum.torrent: TorrentVideoSource,
     VideoSourcesEnum.link: HttpLinkVideoSource,
-}
-
-source_to_enum = {
-    TorrentVideoSource: VideoSourcesEnum.torrent,
-    HttpLinkVideoSource: VideoSourcesEnum.link,
 }

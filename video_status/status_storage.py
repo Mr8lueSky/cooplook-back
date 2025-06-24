@@ -27,6 +27,10 @@ def status_to_server_cmd(status: VideoStatus) -> type[StatusChangeServerCommand]
 @dataclass
 class StatusStorage(Logging):
     status: VideoStatus = field(default_factory=lambda: PauseStatus(0, 0))
+    
+    @property
+    def current_file_ind(self):
+        return self.status.current_file_ind
 
     def set_status(self, new_status: VideoStatus):
         self.status = new_status

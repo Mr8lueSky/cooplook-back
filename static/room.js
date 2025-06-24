@@ -10,7 +10,12 @@ const CHANGE_FILE = "cf"
 
 const MOE_S = 1;
 
+let fi = 0;
+
 let waiting = true;
+let initial = true;
+
+let sendOnConnect = [];
 
 let ignorePlay = 0;
 let ignorePause = 0;
@@ -54,6 +59,7 @@ let setCurrTime = (currentTime) => {
 function reloadVideo() {
         console.log("Reloading video!")
         videoElem.load();
+	videoElem.src = `/files/${room_id}/${fi}`
         videoElem.currentTime = 0;
 }
 
@@ -160,13 +166,12 @@ let createSocket = () => {
                         // peopleCountElem.textContent = arg;
                         return;
                 } else if (cmd == CHANGE_FILE) {
+			fi = arg;
                         reloadVideo();
-                        selectFileElem.selectedIndex = arg;
                         return;
                 }
                 if (Math.abs(videoElem.currentTime - arg) > MOE_S)
                         setCurrTime(arg)
-
 
         }
         websocket.onclose = async () => {

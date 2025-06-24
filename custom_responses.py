@@ -231,7 +231,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                 while not await self.request.is_disconnected() and self.tasks:
                     await sleep(1)
                 if await self.request.is_disconnected():
-                    self.logger.debug("Request dicsonnected by client")
+                    self.logger.debug("Request disconnected by client")
                 self.cancel()
 
     async def _handle_multiple_ranges(

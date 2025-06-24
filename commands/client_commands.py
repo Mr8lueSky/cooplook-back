@@ -76,7 +76,8 @@ class ChangeFileClientCommand(StateChangeClientCommand):
 
     @override
     def default(self, current_status: VideoStatus) -> VideoStatus:
-        return SuspendStatus(0, self.file_ind)
+        status = SuspendStatus(0, self.file_ind).add_suspend_by(self.by)
+        return status
 
 
 class StatusChangeClientCommand(StateChangeClientCommand):

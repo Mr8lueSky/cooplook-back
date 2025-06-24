@@ -50,7 +50,8 @@ class SuspendStatus(VideoStatus):
         return self
 
     def remove_suspend_by(self, suspend_by: int):
-        self.suspend_by.remove(suspend_by)
+        if suspend_by in self.suspend_by:
+            self.suspend_by.remove(suspend_by)
         return self
 
     def should_unsuspend(self):
