@@ -5,8 +5,7 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from commands.command_handlers import (CommandsGroupHandler,
-                                       StatusChangeCommandsHandler)
+from commands.command_handlers import CommandsGroupHandler, StateChangeCommandsHandler
 from commands.server_commands import FileChangeCommand, ServerCommand
 from config import ROOM_INACTIVITY_PERIOD
 from connections import Connection, ConnectionsManager
@@ -14,8 +13,8 @@ from exceptions import NotFound
 from logger import Logging, create_logger
 from models.room_model import RoomModel
 from video_sources import VideoSource
-from video_status.status_storage import StatusStorage
-from video_status.video_statuses import PauseStatus, SuspendStatus, VideoStatus
+from video_status.status_storage import StatusHandler
+from video_status.video_statuses import PauseStatus, VideoStatus
 
 monitor_logger = create_logger("RoomMonitor")
 
@@ -23,20 +22,20 @@ monitor_logger = create_logger("RoomMonitor")
 class RoomStateHandler(Logging):
     def __init__(
         self,
-        status_storage: StatusStorage,
+        status_storage: StatusHandler,
         cmd_handler: CommandsGroupHandler,
         conn_manager: ConnectionsManager,
     ) -> None:
-        self.status_storage: StatusStorage = status_storage
+        self.status_handler: StatusHandler = status_storage
         self.cmd_handler: CommandsGroupHandler = cmd_handler
         self.conn_manager: ConnectionsManager = conn_manager
         self.status_change_lock: Lock = Lock()
 
     def update_model(self, model: RoomModel):
-        _ = self.status_storage.update_model(model)
+        _ = self.status_handler.update_model(model)
 
     async def send_status_update(self):
-        await self.conn_manager.send_room(self.status_storage.to_server_command())
+        await self.conn_manager.send_room(self.status_handler.to_server_command())
 
     async def handle_cmd_str(self, cmd_str: str, by: int):
         async with self.status_change_lock:
@@ -47,43 +46,27 @@ class RoomStateHandler(Logging):
         exclude_id = exclude_id or []
         await self.conn_manager.send_room(cmd, exclude_id)
 
-    def set_status(self, new_status: VideoStatus):
-        self.status_storage.set_status(new_status)
-
-    def set_status_from_current(self, new_status: type[VideoStatus]):
-        _ = self.status_storage.from_current(new_status)
-
     async def add_connection(self, conn: Connection):
         conn_id = await self.conn_manager.add_connection(conn)
-        suspend = SuspendStatus.from_status(self.status_storage.status).add_suspend_by(
-            conn_id
-        )
-        suspend.change_to = PauseStatus
-        self.status_storage.set_status(suspend)
+        _ = self.status_handler.add_suspend_by(conn_id).unsuspend_to(PauseStatus)
         await self.send_status_update()
         return conn_id
 
     async def send_change_file(self):
         await self.conn_manager.send_room(
-            FileChangeCommand(self.status_storage.current_file_ind)
+            FileChangeCommand(self.status_handler.current_file_ind)
         )
 
     async def remove_connection(self, conn_id: int):
         self.conn_manager.remove_connection(conn_id)
-        curr_status = self.status_storage.status
-        if isinstance(curr_status, SuspendStatus):
-            _ = curr_status.remove_suspend_by(conn_id)
-            if curr_status.should_unsuspend():
-                _ = self.status_storage.from_current(PauseStatus)
-        else:
-            _ = self.status_storage.from_current(PauseStatus)
+        _ = self.status_handler.remove_suspend_by(conn_id).set_pause_status()
         await self.send_status_update()
 
     async def cleanup(self): ...
 
     @property
     def current_status(self) -> VideoStatus:
-        return self.status_storage.status
+        return self.status_handler.status
 
     @property
     def people_inside(self):
@@ -96,7 +79,7 @@ class Room:
         room_id: UUID,
         name: str,
         img_link: str,
-        status_storage: StatusStorage,
+        status_storage: StatusHandler,
         video_source: VideoSource,
     ):
         self.room_id: UUID = room_id
@@ -104,7 +87,7 @@ class Room:
         self.img_link: str = img_link
         self.video_source: VideoSource = video_source
         cmd_handler = CommandsGroupHandler(
-            (StatusChangeCommandsHandler(status_storage),)
+            (StateChangeCommandsHandler(status_storage),)
         )
         conn_manager = ConnectionsManager()
         self.room_state_handler: RoomStateHandler = RoomStateHandler(
@@ -118,7 +101,7 @@ class Room:
             room_id=model.room_id,
             name=model.name,
             img_link=model.img_link,
-            status_storage=StatusStorage.from_model(model),
+            status_storage=StatusHandler.from_model(model),
             video_source=VideoSource.from_model(model),
         )
 

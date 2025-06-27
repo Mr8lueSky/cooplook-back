@@ -5,7 +5,7 @@ from typing import override
 from commands.client_commands import (ClientCommand, StateChangeClientCommand,
                                       client_commands)
 from logger import Logging
-from video_status.status_storage import StatusStorage
+from video_status.status_storage import StatusHandler
 
 
 class CommandTypeHandler(ABC):
@@ -15,12 +15,12 @@ class CommandTypeHandler(ABC):
     def handle(self, cmd: ClientCommand): ...
 
 
-class StatusChangeCommandsHandler(CommandTypeHandler):
+class StateChangeCommandsHandler(CommandTypeHandler):
     handle_type: type[ClientCommand] = StateChangeClientCommand
 
-    def __init__(self, status_storage: StatusStorage) -> None:
+    def __init__(self, status_storage: StatusHandler) -> None:
         super().__init__()
-        self.status_storage: StatusStorage = status_storage
+        self.status_storage: StatusHandler = status_storage
 
     @override
     def handle(self, cmd: ClientCommand):
@@ -30,7 +30,7 @@ class StatusChangeCommandsHandler(CommandTypeHandler):
         self.handle_status_change_cmd(cmd)
 
     def handle_status_change_cmd(self, cmd: StateChangeClientCommand):
-        self.status_storage.set_status(cmd.handle_status(self.status_storage.status))
+        _ = cmd.handle(self.status_storage)
 
 
 class CommandsGroupHandler(CommandTypeHandler, Logging):
