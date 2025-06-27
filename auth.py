@@ -3,8 +3,6 @@ from typing import Annotated
 
 import jwt
 from fastapi import Cookie, HTTPException
-from jwt.exceptions import JWTDecodeError
-from jwt.jwk import OctetJWK
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -16,8 +14,6 @@ from schemas.user_schema import GetUserSchema
 
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30 # one mounth
-SECRET_KEY_JWK = OctetJWK(AUTH_SECRET_KEY)
-jwt_encoder = jwt.JWT()
 
 
 async def authenticate_user(session: AsyncSession, username: str, password: str):
@@ -33,7 +29,7 @@ def create_access_token(data: dict, expires_delta: timedelta) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + expires_delta
     to_encode["exp"] = int(expire.timestamp())
-    encoded_jwt = jwt_encoder.encode(to_encode, SECRET_KEY_JWK, alg=ALGORITHM)
+    encoded_jwt = jwt.encode(to_encode, AUTH_SECRET_KEY, ALGORITHM)
     return encoded_jwt
 
 
@@ -48,11 +44,11 @@ async def current_user(token: Annotated[str | None, Cookie()] = None) -> GetUser
         )
 
     try:
-        payload = jwt_encoder.decode(token, SECRET_KEY_JWK)
+        payload = jwt.decode(token, AUTH_SECRET_KEY, ALGORITHM)
         username = payload.get("sub")
         if username is None:
             raise logout_resp
-    except JWTDecodeError:
+    except jwt.InvalidTokenError as exc:
         raise logout_resp
     async with async_session_maker.begin() as session:
         user = await UserModel.get_name(session, username)
