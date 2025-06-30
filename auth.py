@@ -6,14 +6,13 @@ from fastapi import Cookie, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
-from config import AUTH_SECRET_KEY
+from config import ACCESS_TOKEN_EXPIRE, AUTH_SECRET_KEY
 from engine import async_session_maker
 from exceptions import NotFound
 from models.user_model import UserModel
 from schemas.user_schema import GetUserSchema
 
 ALGORITHM = "HS256"
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 30 # one mounth
 
 
 async def authenticate_user(session: AsyncSession, username: str, password: str):
@@ -61,9 +60,8 @@ async def generate_token(session: AsyncSession, username: str, password: str):
     user = await authenticate_user(session, username, password)
     if not user:
         raise NotFound("User not found!")
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.name},
-        expires_delta=access_token_expires,
+        expires_delta=ACCESS_TOKEN_EXPIRE,
     )
     return access_token

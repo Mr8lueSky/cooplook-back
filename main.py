@@ -1,3 +1,4 @@
+from datetime import datetime
 import json
 import logging
 import os
@@ -22,7 +23,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from auth import current_user, generate_token
-from config import ENV, TORRENT_FILES_SAVE_PATH
+from config import ACCESS_TOKEN_EXPIRE, TORRENT_FILES_SAVE_PATH
 from connections import Connection
 from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
@@ -231,7 +232,14 @@ async def login(user: Annotated[LoginUserSchema, Form()]):
         try:
             token = await generate_token(session, user.name, user.password)
             resp = RedirectResponse("/rooms/", 303)
-            resp.set_cookie("token", token, httponly=True)
+            now = datetime.now()
+            expires = int((now + ACCESS_TOKEN_EXPIRE).timestamp())
+            resp.set_cookie(
+                "token",
+                token,
+                httponly=True,
+                expires=expires,
+            )
         except (HTTPException, RequestValidationError):
             raise HTTPException("Incorrent username or password!")
     return resp
