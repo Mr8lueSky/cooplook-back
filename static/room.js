@@ -241,7 +241,8 @@ videoElem.addEventListener("canplaythrough", () => {
 
 
 videoElem.addEventListener("error", (e) => {
-        console.error(`Got error: ${e}`)
+        console.error(`Got error video error`)
+	console.error(e)
 })
 
 if (navigator.getAutoplayPolicy == !undefined && (navigator.getAutoplayPolicy(videoElem) === "allowed-muted" ||

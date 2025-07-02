@@ -128,7 +128,7 @@ class TorrentVideoSource(VideoSource):
 
     @override
     async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:
-        _ = self.torrent_manager.wait_file_ready()
+        _ = await self.torrent_manager.wait_file_ready()
         r = LoadingTorrentFileResponse(self.torrent_manager, request)
         self.resps.append(r)
         return r

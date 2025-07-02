@@ -1,4 +1,5 @@
 from asyncio import sleep
+import asyncio
 from collections import defaultdict
 from collections.abc import AsyncGenerator, Awaitable, Iterable
 from enum import Enum
@@ -7,6 +8,8 @@ from time import time
 from typing import Callable
 
 import libtorrent as lt
+
+from logger import Logging
 
 
 class PieceTimeoutException(Exception): ...
@@ -101,7 +104,7 @@ class Torrent:
         return self.files.file_size(file_ind)
 
 
-class AlertObserver:
+class AlertObserver(Logging):
     def __init__(self, torrent: Torrent) -> None:
         self.alert_observers: defaultdict[AlertType, list[NotifyAlert]] = defaultdict(
             list
@@ -114,6 +117,7 @@ class AlertObserver:
             alerts = self.torrent.pop_alerts()
             for a in alerts:
                 alert_type = type(a)
+                self.logger.debug(f"Got alert: {a}")
                 for observer in self.alert_observers[alert_type]:
                     await observer(a)
             await sleep(OBSERVE_ALERTS_SLEEP)
@@ -161,7 +165,7 @@ class PieceGetter:
             raise PieceReadTimeoutException(f"Can't read {piece_id} in {timeout_s}!")
 
     def require_piece(self, piece_id: int):
-        self.piece_wait_count[piece_id] += 1
+        self.piece_wait_count[piece_id] = self.piece_wait_count.get(piece_id, 0) + 1
 
     def not_require_piece(self, piece_id: int):
         self.piece_wait_count[piece_id] -= 1
@@ -183,7 +187,7 @@ class PieceGetter:
             self.not_require_piece(piece_id)
 
 
-class FileTorrentHandler:
+class FileTorrentHandler(Logging):
     def __init__(self, torrent_path: str, file_index: int, save_path: str) -> None:
         self.torrent: Torrent = Torrent(torrent_path, save_path)
         self.dont_download_everything()
@@ -199,6 +203,7 @@ class FileTorrentHandler:
         )
         self.torrent.set_piece_deadline(piece_start, PiecePriority.HIGHEST)
         self.torrent.set_piece_deadline(piece_end, PiecePriority.HIGHEST)
+        _ = asyncio.create_task(self.alert_observer.observe_alerts())
 
     @property
     def file_path(self):
@@ -230,6 +235,7 @@ class FileTorrentHandler:
 
     def cleanup(self):
         self.torrent.cleanup()
+        self.alert_observer.cleanup()
 
     async def iter_pieces(
         self, byte_start: int, byte_end: int = -1
@@ -244,6 +250,11 @@ class FileTorrentHandler:
             self.file_index, byte_end
         )
 
+        self.logger.debug(
+            f"Starting download {byte_start}-{byte_end}. "
+            + f"{piece_start=}, {piece_end=} "
+            + f"{start_offset=}, {end_offset=}"
+        )
         if end_offset == 0:
             piece_end -= 1
             end_offset = self.torrent.piece_size(piece_end)
@@ -251,9 +262,16 @@ class FileTorrentHandler:
         for piece_id in range(piece_start, piece_end + 1):
             self.torrent.set_piece_deadline(piece_id, piece_start - piece_id)
 
+        if piece_start == piece_end:
+            yield (await self.piece_getter.get_piece(piece_start))[
+                start_offset:end_offset
+            ]
+            return
+
         yield (await self.piece_getter.get_piece(piece_start))[start_offset:]
 
         for piece_id in range(piece_start + 1, piece_end):
             yield await self.piece_getter.get_piece(piece_id)
 
-        yield (await self.piece_getter.get_piece(piece_end))[:end_offset]
+        if piece_end != piece_start:
+            yield (await self.piece_getter.get_piece(piece_end))[:end_offset]
