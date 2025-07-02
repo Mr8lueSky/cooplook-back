@@ -1,6 +1,5 @@
 import abc
 import os
-from asyncio import sleep
 from pathlib import Path
 from typing import override
 from uuid import UUID, uuid1
@@ -9,8 +8,9 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 import config
-from custom_responses import LoadingTorrentFileResponse, TorrentManager
+from custom_responses import LoadingTorrentFileResponse
 from models.room_model import RoomModel, VideoSourcesEnum
+from torrent.piece_manager import FileTorrentHandler
 
 
 class VideoSource(abc.ABC):
@@ -19,7 +19,7 @@ class VideoSource(abc.ABC):
 
     def __init__(self, data: str, file_index: int) -> None:
         super().__init__()
-        self.curr_fi: int = file_index
+        self.file_index: int = file_index
 
     @abc.abstractmethod
     def get_available_files(self) -> list[tuple[int, str]]: ...
@@ -89,8 +89,8 @@ class TorrentVideoSource(VideoSource):
         self.folder_id: UUID = uuid1()
         os.makedirs(self.save_path, exist_ok=True)
         self.torrent: str = torrent
-        self.tm: TorrentManager = TorrentManager(
-            self.torrent, self.curr_fi, self.save_path
+        self.torrent_manager: FileTorrentHandler = FileTorrentHandler(
+            self.torrent, self.file_index, self.save_path
         )
         self.resps: list[LoadingTorrentFileResponse] = []
 
@@ -101,22 +101,20 @@ class TorrentVideoSource(VideoSource):
     @override
     def set_file_index(self, fi: int) -> bool:
         """Returns is file changed or not"""
-        if fi == self.curr_fi:
+        if fi == self.file_index:
             return False
-        self.tm.set_file_index(fi)
-        self.curr_fi: int = fi
-        self.tm.initiate_torrent_download()
+        self.torrent_manager.set_file_index(fi)
+        self.file_index: int = fi
         return True
 
     @override
     def cleanup(self):
         super().cleanup()
-        self.tm.cleanup()
+        self.torrent_manager.cleanup()
 
     @override
     def start(self):
         os.makedirs(self.save_path, exist_ok=True)
-        self.tm.initiate_torrent_download()
 
     @override
     def cancel_current_requests(self):
@@ -126,18 +124,12 @@ class TorrentVideoSource(VideoSource):
 
     @override
     def get_available_files(self) -> list[tuple[int, str]]:
-        return self.tm.get_all_filenames()
+        return self.torrent_manager.get_all_files()
 
     @override
     async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:
-        file_path = self.tm.get_current_filepath()
-        while not os.path.isfile(file_path):
-            await sleep(0)
-        r = LoadingTorrentFileResponse(
-            file_path,
-            piece_manager=self.tm,
-            request=request,
-        )
+        _ = self.torrent_manager.wait_file_ready()
+        r = LoadingTorrentFileResponse(self.torrent_manager, request)
         self.resps.append(r)
         return r
 

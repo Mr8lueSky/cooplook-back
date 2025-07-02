@@ -7,8 +7,16 @@ from typing import Annotated
 from uuid import UUID, uuid1
 
 import anyio
-from fastapi import (Depends, FastAPI, Form, Path, Request, Response,
-                     WebSocket, WebSocketDisconnect)
+from fastapi import (
+    Depends,
+    FastAPI,
+    Form,
+    Path,
+    Request,
+    Response,
+    WebSocket,
+    WebSocketDisconnect,
+)
 from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
@@ -20,10 +28,14 @@ from engine import async_session_maker, create_all, create_users
 from exceptions import HTTPException
 from models.room_model import RoomModel
 from room import RoomStorage, monitor_rooms
-from schemas.room_schemas import (CreateRoomLinkSchema,
-                                  CreateRoomTorrentSchema, GetRoomSchema,
-                                  GetRoomWatchingSchema, UpdateSourceToLink,
-                                  UpdateSourceToTorrentSchema)
+from schemas.room_schemas import (
+    CreateRoomLinkSchema,
+    CreateRoomTorrentSchema,
+    GetRoomSchema,
+    GetRoomWatchingSchema,
+    UpdateSourceToLink,
+    UpdateSourceToTorrentSchema,
+)
 from schemas.user_schema import GetUserSchema, LoginUserSchema
 from templates import get_template_response
 from video_sources import HttpLinkVideoSource, TorrentVideoSource
@@ -79,40 +91,6 @@ def handle_validation_error(r: Request, exc: RequestValidationError):
     )
     resp.set_cookie("exc", json.dumps(exceptions))
     return resp
-
-
-if ENV == "DEV":
-    TORRENT_ROOM_UUID = UUID("59afc00e-3b05-11f0-9332-00e93a0971c5")
-    VIDEO_ROOM_UUID = UUID("7b3038c6-3b05-11f0-bfca-00e93a0971c5")
-
-    @app.get("/rooms/{room_id}/stats")
-    async def get_stats(room_id: UUID):
-        async with async_session_maker.begin() as session:
-            room = await RoomStorage.get_room(session, room_id)
-            return JSONResponse(json.dumps(room, default=lambda o: str(o)))
-
-    @app.get("/priorities/{room_id}")
-    async def get_priorities(room_id: UUID):
-        async with async_session_maker.begin() as session:
-            r = await RoomStorage.get_room(session, room_id)
-            if not isinstance(r.video_source, TorrentVideoSource):
-                return JSONResponse({"error": "Is not torrent"}, 422)
-            if r.video_source.tm.th is None:
-                return JSONResponse({"error": "In not initialized!"}, 422)
-            return [
-                (i, a)
-                for i, a in enumerate(r.video_source.tm.th.get_piece_priorities())
-            ]
-
-    @app.get("/have/{piece_id}/{room_id}")
-    async def have_piece(piece_id: int, room_id: UUID):
-        async with async_session_maker.begin() as session:
-            vs = (await RoomStorage.get_room(session, room_id)).video_source
-            if not isinstance(vs, TorrentVideoSource):
-                return JSONResponse({"error": "not a torrent"}, 422)
-            if not vs.tm or not vs.tm.th:
-                return ""
-            return vs.tm.th.have_piece(piece_id)
 
 
 @app.post("/rooms/from_link")

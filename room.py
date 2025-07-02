@@ -135,7 +135,7 @@ class Room:
 
     @property
     def curr_fi(self):
-        return self.video_source.curr_fi
+        return self.video_source.file_index
 
     @property
     def people_inside(self):
