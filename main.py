@@ -22,13 +22,13 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from auth import current_user, generate_token
+from lib.auth import current_user, generate_token
 from config import ACCESS_TOKEN_EXPIRE, TORRENT_FILES_SAVE_PATH
-from connections import Connection
-from engine import async_session_maker, create_all, create_users
-from exceptions import HTTPException
+from lib.connections import Connection
+from lib.engine import async_session_maker, create_all, create_users
+from lib.http_exceptions import HTTPException
 from models.room_model import RoomModel
-from room import RoomStorage, monitor_rooms
+from lib.room import RoomStorage, monitor_rooms
 from schemas.room_schemas import (
     CreateRoomLinkSchema,
     CreateRoomTorrentSchema,
@@ -39,7 +39,7 @@ from schemas.room_schemas import (
 )
 from schemas.user_schema import GetUserSchema, LoginUserSchema
 from templates import get_template_response
-from video_sources import HttpLinkVideoSource, TorrentVideoSource
+from lib.video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
 

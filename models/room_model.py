@@ -5,7 +5,7 @@ from sqlalchemy import String, Uuid, delete, exists, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
-from exceptions import BadRequest, NotFound
+from lib.http_exceptions import BadRequest, NotFound
 from models.base import BaseModel
 
 

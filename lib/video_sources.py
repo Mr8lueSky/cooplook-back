@@ -8,9 +8,9 @@ from fastapi import Request, Response
 from fastapi.responses import RedirectResponse
 
 import config
-from custom_responses import LoadingTorrentFileResponse
+from lib.custom_responses import LoadingTorrentFileResponse
 from models.room_model import RoomModel, VideoSourcesEnum
-from torrent.piece_manager import FileTorrentHandler
+from lib.torrent.torrent_handler import FileTorrentHandler
 
 
 class VideoSource(abc.ABC):

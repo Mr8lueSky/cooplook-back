@@ -1,8 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import Self, override
 
-from logger import Logging
-from video_status.status_storage import StatusHandler
+from lib.logger import Logging
+from lib.video_status.status_storage import StatusHandler
 
 client_commands: dict[str, type["ClientCommand"]] = {}
 

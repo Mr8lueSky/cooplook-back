@@ -8,7 +8,7 @@ from pydantic import Field, StringConstraints, model_validator
 from pydantic_core import core_schema
 
 from config import MAX_TORRENT_FILE_SIZE
-from exceptions import ContentTooLarge, UnprocessableEntity
+from lib.http_exceptions import ContentTooLarge, UnprocessableEntity
 from schemas.base_schema import BaseSchema
 
 RoomNameField = Annotated[

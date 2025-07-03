@@ -10,6 +10,7 @@ class HTTPException(Exception):
     status_code = 200
 
     def __init__(self, msg: str, html: bool = True, severity: Severity = Severity.error) -> None:
+        super().__init__()
         self.msg = msg
         self.html = html
         self.severity = severity

@@ -2,11 +2,11 @@ from asyncio import Lock, gather
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import count
-from logger import Logging
+from lib.logger import Logging
 
 from fastapi import WebSocket
 
-from commands.server_commands import ServerCommand
+from lib.commands.server_commands import ServerCommand
 
 
 @dataclass

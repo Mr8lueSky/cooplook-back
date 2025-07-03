@@ -5,16 +5,16 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from commands.command_handlers import CommandsGroupHandler, StateChangeCommandsHandler
-from commands.server_commands import FileChangeCommand, ServerCommand
+from lib.commands.command_handlers import CommandsGroupHandler, StateChangeCommandsHandler
+from lib.commands.server_commands import FileChangeCommand, ServerCommand
 from config import ROOM_INACTIVITY_PERIOD
-from connections import Connection, ConnectionsManager
-from exceptions import NotFound
-from logger import Logging, create_logger
+from lib.connections import Connection, ConnectionsManager
+from lib.http_exceptions import NotFound
+from lib.logger import Logging, create_logger
 from models.room_model import RoomModel
-from video_sources import VideoSource
-from video_status.status_storage import StatusHandler
-from video_status.video_statuses import PauseStatus, VideoStatus
+from lib.video_sources import VideoSource
+from lib.video_status.status_storage import StatusHandler
+from lib.video_status.video_statuses import PauseStatus, VideoStatus
 
 monitor_logger = create_logger("RoomMonitor")
 

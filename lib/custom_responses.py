@@ -8,8 +8,8 @@ from fastapi import Request
 from starlette.responses import FileResponse
 from starlette.types import Send
 
-from logger import Logging
-from torrent.piece_manager import FileTorrentHandler
+from lib.logger import Logging
+from lib.torrent.torrent_handler import FileTorrentHandler
 
 
 class LoadingTorrentFileResponse(FileResponse, Logging):

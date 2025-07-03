@@ -4,7 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from config import DB_URL, ENV
-from logger import Logging
+from lib.logger import Logging
 from models.base import BaseModel
 from models.user_model import UserModel
 from schemas.user_schema import LoginUserSchema

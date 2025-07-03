@@ -2,15 +2,15 @@ from dataclasses import dataclass, field
 from typing import Self
 
 
-from commands.server_commands import (
+from lib.commands.server_commands import (
     PauseServerCommand,
     PlayServerCommand,
     StatusChangeServerCommand,
     SuspendServerCommand,
 )
-from logger import Logging
+from lib.logger import Logging
 from models.room_model import RoomModel
-from video_status.video_statuses import (
+from lib.video_status.video_statuses import (
     PauseStatus,
     PlayStatus,
     SuspendStatus,

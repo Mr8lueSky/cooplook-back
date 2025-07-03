@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
 from config import PW_SECRET_KET
-from exceptions import NotFound
+from lib.http_exceptions import NotFound
 from models.base import BaseModel
 
 

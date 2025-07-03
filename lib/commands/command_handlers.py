@@ -2,10 +2,10 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import override
 
-from commands.client_commands import (ClientCommand, StateChangeClientCommand,
+from lib.commands.client_commands import (ClientCommand, StateChangeClientCommand,
                                       client_commands)
-from logger import Logging
-from video_status.status_storage import StatusHandler
+from lib.logger import Logging
+from lib.video_status.status_storage import StatusHandler
 
 
 class CommandTypeHandler(ABC):
