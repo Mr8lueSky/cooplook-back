@@ -14,8 +14,8 @@ WAIT_FILE_READY_SLEEP = 0
 
 
 class FileTorrentHandler(Logging):
-    def __init__(self, torrent_path: str, file_index: int, save_path: str) -> None:
-        self.torrent: Torrent = Torrent(torrent_path, save_path)
+    def __init__(self, torrent: Torrent, file_index: int) -> None:
+        self.torrent: Torrent = torrent
         self.dont_download_everything()
         self.alert_observer: AlertObserver = AlertObserver(self.torrent)
         self.file_index: int = file_index

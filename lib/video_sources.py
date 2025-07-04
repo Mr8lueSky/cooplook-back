@@ -9,6 +9,7 @@ from fastapi.responses import RedirectResponse
 
 import config
 from lib.custom_responses import LoadingTorrentFileResponse
+from lib.torrent.torrent import Torrent
 from models.room_model import RoomModel, VideoSourcesEnum
 from lib.torrent.torrent_handler import FileTorrentHandler
 
@@ -82,17 +83,22 @@ class TorrentVideoSource(VideoSource):
 
     def __init__(
         self,
-        torrent: str,
+        torrent_path: str,
         file_index: int,
     ):
         super().__init__("", file_index)
         self.folder_id: UUID = uuid1()
         os.makedirs(self.save_path, exist_ok=True)
-        self.torrent: str = torrent
+        self.torrent_path: str = torrent_path
+        self.torrent: Torrent = Torrent(self.torrent_path, self.save_path)
         self.torrent_manager: FileTorrentHandler = FileTorrentHandler(
-            self.torrent, self.file_index, self.save_path
+            self.torrent, self.file_index
         )
         self.resps: list[LoadingTorrentFileResponse] = []
+        self.file_mapping: list[int] = []
+        self.update_file_mapping()
+        self.file_index = -1
+        _ = self.set_file_index(file_index)
 
     @property
     def save_path(self) -> str:
@@ -103,7 +109,8 @@ class TorrentVideoSource(VideoSource):
         """Returns is file changed or not"""
         if fi == self.file_index:
             return False
-        self.torrent_manager.set_file_index(fi)
+        torrent_ind = self.file_mapping[fi]
+        self.torrent_manager.set_file_index(torrent_ind)
         self.file_index: int = fi
         return True
 
@@ -123,9 +130,18 @@ class TorrentVideoSource(VideoSource):
             r.cancel()
         self.resps.clear()
 
+    def update_file_mapping(self):
+        self.file_mapping.clear()
+        files_torrent = sorted(self.torrent_manager.get_all_files(), key=lambda x: x[1])
+        for torrent_ind, _ in files_torrent:
+            self.file_mapping.append(torrent_ind)
+
     @override
     def get_available_files(self) -> list[tuple[int, str]]:
-        return sorted(self.torrent_manager.get_all_files(), key=lambda x: x[1])
+        return [
+            (front_i, self.torrent.get_file_name(torrent_i))
+            for front_i, torrent_i in enumerate(self.file_mapping)
+        ]
 
     @override
     async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:
