@@ -46,8 +46,10 @@ class StatusHandler(Logging):
         return self
 
     def set_current_file_ind(self, fi: int) -> Self:
+        if fi == self.status.current_file_ind:
+            return self
         self.status.current_file_ind = fi
-        return self
+        return self.set_pause_status().set_video_time(0)
 
     def set_play_status(self) -> Self:
         if not isinstance(self.status, PauseStatus):

@@ -5,7 +5,10 @@ from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from lib.commands.command_handlers import CommandsGroupHandler, StateChangeCommandsHandler
+from lib.commands.command_handlers import (
+    CommandsGroupHandler,
+    StateChangeCommandsHandler,
+)
 from lib.commands.server_commands import FileChangeCommand, ServerCommand
 from config import ROOM_INACTIVITY_PERIOD
 from lib.connections import Connection, ConnectionsManager
@@ -121,7 +124,7 @@ class Room:
 
     async def handle_cmd_str(self, cmd_str: str, by: int):
         await self.room_state_handler.handle_cmd_str(cmd_str, by)
-        status = self.room_state_handler.current_status
+        status = self.room_state_handler.status_handler
         if self.video_source.set_file_index(status.current_file_ind):
             await self.room_state_handler.send_change_file()
 
@@ -136,6 +139,12 @@ class Room:
     @property
     def curr_fi(self):
         return self.video_source.file_index
+
+    async def set_send_curr_fi(self, val: int):
+        status = self.room_state_handler.status_handler
+        _ = status.set_current_file_ind(val)
+        if self.video_source.set_file_index(status.current_file_ind):
+            await self.room_state_handler.send_change_file()
 
     @property
     def people_inside(self):
@@ -188,6 +197,7 @@ class RoomStorage:
         if cls.is_room_loaded(room_id):
             room = await cls.get_room(session, room_id)
             await room.cleanup()
+        await RoomModel.delete(session, room_id)
 
     @classmethod
     async def save_room(cls, session: AsyncSession, room_id: UUID):

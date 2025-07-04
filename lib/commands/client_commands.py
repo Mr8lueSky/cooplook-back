@@ -53,11 +53,7 @@ class ChangeFileClientCommand(StateChangeClientCommand):
 
     @override
     def handle(self, status_handler: StatusHandler):
-        _ = (
-            status_handler.set_current_file_ind(self.file_ind)
-            .set_pause_status()
-            .set_video_time(0)
-        )
+        _ = status_handler.set_current_file_ind(self.file_ind)
 
 
 class StatusChangeClientCommand(StateChangeClientCommand, ABC):

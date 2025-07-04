@@ -110,6 +110,7 @@ class TorrentVideoSource(VideoSource):
     @override
     def cleanup(self):
         super().cleanup()
+        self.cancel_current_requests()
         self.torrent_manager.cleanup()
 
     @override
@@ -124,7 +125,7 @@ class TorrentVideoSource(VideoSource):
 
     @override
     def get_available_files(self) -> list[tuple[int, str]]:
-        return self.torrent_manager.get_all_files()
+        return sorted(self.torrent_manager.get_all_files(), key=lambda x: x[1])
 
     @override
     async def get_video_response(self, request: Request) -> LoadingTorrentFileResponse:

@@ -35,7 +35,7 @@ class FileTorrentHandler(Logging):
     def file_path(self):
         return self.torrent.file_path(self.file_index)
 
-    async def wait_file_ready(self, timeout_s: int = 15) -> str:
+    async def wait_file_ready(self, timeout_s: int = 30) -> str:
         finish = time() + timeout_s
         while time() < finish and not os.path.exists(self.file_path):
             await sleep(WAIT_FILE_READY_SLEEP)
@@ -58,6 +58,7 @@ class FileTorrentHandler(Logging):
     def set_file_index(self, file_index: int):
         self.file_index = file_index
         self.torrent.clear_deadlines()
+        self.init_download()
 
     def cleanup(self):
         self.torrent.cleanup()
@@ -86,7 +87,7 @@ class FileTorrentHandler(Logging):
             end_offset = self.torrent.piece_size(piece_end)
 
         for piece_id in range(piece_start, piece_end + 1):
-            self.torrent.set_piece_deadline(piece_id, piece_start - piece_id)
+            self.torrent.set_piece_deadline(piece_id, piece_id - piece_start)
 
         if piece_start == piece_end:
             yield (await self.piece_getter.get_piece(piece_start))[

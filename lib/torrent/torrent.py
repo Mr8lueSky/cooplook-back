@@ -1,6 +1,6 @@
 from collections.abc import Iterable
 from enum import Enum
-
+from lib.logger import Logging
 import libtorrent as lt
 
 
@@ -20,7 +20,7 @@ class PiecePriority(int, Enum):
     HIGHEST = 6
 
 
-class Torrent:
+class Torrent(Logging):
     def __init__(self, torrent_path: str, save_path: str):
         self.session: lt.session = lt.session(
             {"enable_incoming_utp": False, "enable_incoming_tcp": False}
@@ -33,6 +33,7 @@ class Torrent:
         self.files: lt.file_storage = self.ti.files()
 
     def cleanup(self):
+        self.logger.debug(f"Removing torrent handle for {self.save_path}")
         self.session.remove_torrent(self.th, lt.session.delete_files)
 
     def piece_bytes_offset(self, file_id: int, bytes_offset: int) -> tuple[int, int]:
@@ -51,9 +52,11 @@ class Torrent:
         return PiecePriority(self.th.piece_priority(piece_id))
 
     def set_piece_deadline(self, piece_id: int, deadline_s: int, flags: int = 0):
+        self.logger.debug(f"Setting deadline for piece {piece_id} to {deadline_s}")
         self.th.set_piece_deadline(piece_id, deadline_s, flags)
 
     def clear_deadlines(self):
+        self.logger.debug(f"Clearing deadlines for {self.save_path}")
         self.th.clear_piece_deadlines()
 
     def pieces_count(self) -> int:
