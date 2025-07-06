@@ -195,8 +195,7 @@ class RoomStorage:
     async def delete_room(cls, session: AsyncSession, room_id: UUID):
         room_st_logger.debug(f"Deleting room {room_id}")
         if cls.is_room_loaded(room_id):
-            room = await cls.get_room(session, room_id)
-            await room.cleanup()
+            await cls.unload_room(room_id)
         await RoomModel.delete(session, room_id)
 
     @classmethod
