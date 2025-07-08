@@ -1,13 +1,11 @@
 from datetime import datetime
 import json
 import logging
-import os
 from string import ascii_lowercase, ascii_uppercase, digits
 from traceback import format_exc
 from typing import Annotated
-from uuid import UUID, uuid1
+from uuid import UUID
 
-import anyio
 from fastapi import (
     Depends,
     FastAPI,
@@ -23,7 +21,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 
 from lib.auth import current_user, generate_token
-from config import ACCESS_TOKEN_EXPIRE, TORRENT_FILES_SAVE_PATH
+from config import ACCESS_TOKEN_EXPIRE
 from lib.connections import Connection
 from lib.engine import async_session_maker, create_all, create_users
 from lib.http_exceptions import HTTPException
@@ -34,12 +32,12 @@ from schemas.room_schemas import (
     CreateRoomTorrentSchema,
     GetRoomSchema,
     GetRoomWatchingSchema,
-    UpdateSourceToLink,
-    UpdateSourceToTorrentSchema,
+    UpdateRoomLinkSchema,
+    UpdateRoomTorrentSchema,
 )
 from schemas.user_schema import GetUserSchema, LoginUserSchema
+from services.room_service import RoomService
 from templates import get_template_response
-from lib.video_sources import HttpLinkVideoSource, TorrentVideoSource
 
 app = FastAPI()
 
@@ -64,6 +62,7 @@ def format_exc_msg(msg: str) -> str:
 
 @app.exception_handler(HTTPException)
 def handle_http_exception(r: Request, exc: HTTPException):
+    logger.error(f"Got an error: {type(exc)} {exc}\n{format_exc()}")
     if exc.html:
         resp = RedirectResponse(".", 303)
         exceptions: list[str] = []
@@ -81,6 +80,7 @@ def handle_http_exception(r: Request, exc: HTTPException):
 
 @app.exception_handler(RequestValidationError)
 def handle_validation_error(r: Request, exc: RequestValidationError):
+    logger.error(f"Got an error: {type(exc)} {exc}\n{format_exc()}")
     resp = RedirectResponse(".", 303)
     exceptions: list[str] = []
     try:
@@ -100,10 +100,8 @@ async def create_room_link(
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
     async with async_session_maker.begin() as session:
-        r = await RoomModel.create(
-            session, room.name, HttpLinkVideoSource.enum, room.video_link, room.img_link
-        )
-        return RedirectResponse(f"/rooms/{r.room_id}", 303)
+        room_id = await RoomService.create_room(session, room)
+    return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
 @app.post("/rooms/from_torrent")
@@ -111,21 +109,9 @@ async def create_room_torrent(
     room: CreateRoomTorrentSchema = Form(),
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
-    torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
-    os.makedirs(TORRENT_FILES_SAVE_PATH, exist_ok=True)
-    async with await anyio.open_file(torrent_fpth, mode="wb") as file:
-        await file.write(room.file_content)
-
     async with async_session_maker.begin() as session:
-        r = await RoomModel.create(
-            session,
-            room.name,
-            TorrentVideoSource.enum,
-            torrent_fpth.as_posix(),
-            room.img_link,
-        )
-
-        return RedirectResponse(f"/rooms/{r.room_id}", 303)
+        room_id = await RoomService.create_room(session, room)
+    return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
 @app.get("/files/{room_id}/{fi}")
@@ -145,52 +131,25 @@ async def delete_room_end(room_id: UUID, _: GetUserSchema = Depends(current_user
 
 
 @app.post("/rooms/{room_id}/vs_torrent")
-async def update_source_to_torrent(
+async def update_torrent_room(
     room_id: UUID,
-    room: UpdateSourceToTorrentSchema = Form(),
+    room_data: UpdateRoomTorrentSchema = Form(),
     _: GetUserSchema = Depends(current_user),
 ):
-    torrent_fpth = None
-    if room.torrent_file is not None and room.file_content is not None:
-        torrent_fpth = TORRENT_FILES_SAVE_PATH / str(uuid1())
-        async with await anyio.open_file(torrent_fpth, mode="wb") as file:
-            await file.write(room.file_content)
-        torrent_fpth = torrent_fpth.as_posix()
-
     async with async_session_maker.begin() as session:
-        await RoomModel.update(
-            session,
-            room_id,
-            last_watch_ts=0,
-            last_file_ind=0,
-            vs_enum=TorrentVideoSource.enum,
-            name=room.name or None,
-            img_link=room.img_link or None,
-            video_source_data=torrent_fpth or None,
-        )
-        await RoomStorage.load_room(session, room_id, ignore_if_loaded=False)
-        return RedirectResponse(f"/rooms/{room_id}", 303)
+        await RoomService.update_room(session, room_id, room_data)
+    return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
 @app.post("/rooms/{room_id}/vs_link")
-async def update_source_to_link(
+async def update_link_room(
     room_id: UUID,
-    room: UpdateSourceToLink = Form(),
+    room_data: UpdateRoomLinkSchema = Form(),
     _: GetUserSchema = Depends(current_user),
 ) -> Response:
     async with async_session_maker.begin() as session:
-        await RoomModel.update(
-            session,
-            room_id,
-            last_watch_ts=0,
-            last_file_ind=0,
-            vs_enum=HttpLinkVideoSource.enum,
-            name=room.name or None,
-            img_link=room.img_link or None,
-            video_source_data=room.video_link or None,
-        )
-        await RoomStorage.load_room(session, room_id, ignore_if_loaded=False)
-        return RedirectResponse(f"/rooms/{room_id}", 303)
+        await RoomService.update_room(session, room_id, room_data)
+    return RedirectResponse(f"/rooms/{room_id}", 303)
 
 
 @app.get("/rooms/{room_id}")

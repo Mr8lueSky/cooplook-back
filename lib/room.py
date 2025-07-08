@@ -2,7 +2,6 @@ import asyncio
 import time
 from asyncio import Lock
 from uuid import UUID
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from lib.commands.command_handlers import (
