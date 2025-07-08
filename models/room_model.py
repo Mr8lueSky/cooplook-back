@@ -17,7 +17,7 @@ class VideoSourcesEnum(str, Enum):
 class RoomModel(MappedAsDataclass, BaseModel):
     __tablename__ = "rooms"
 
-    name: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(32), unique=True)
     video_source: Mapped[VideoSourcesEnum]
     video_source_data: Mapped[str] = mapped_column(String(256))
     img_link: Mapped[str] = mapped_column(String(256))
