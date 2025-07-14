@@ -53,6 +53,7 @@ class FileSizeValidator:
 class CreateRoomSchema(BaseSchema, ABC):
     name: RoomNameField
     img_link: LinkField
+    description: Annotated[str, StringConstraints(max_length=256)]
 
 
 class CreateRoomLinkSchema(CreateRoomSchema):

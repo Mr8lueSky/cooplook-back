@@ -76,6 +76,7 @@ class TorrentRoomCreator(RoomCreator):
             VideoSourcesEnum.torrent,
             torrent_fpth.as_posix(),
             data.img_link,
+            data.description
         )
         return r.room_id
 
@@ -96,6 +97,7 @@ class TorrentRoomCreator(RoomCreator):
             name=data.name or None,
             img_link=data.img_link or None,
             video_source_data=torrent_path,
+            description=data.description
         )
 
 
@@ -115,6 +117,7 @@ class LinkRoomCreator(RoomCreator):
             VideoSourcesEnum.link,
             data.video_link,
             data.img_link,
+            data.description
         )
         return r.room_id
 
@@ -132,6 +135,7 @@ class LinkRoomCreator(RoomCreator):
             vs_enum=VideoSourcesEnum.link,
             video_source_data=data.video_link,
             img_link=data.img_link,
+            description=data.description
         )
 
 

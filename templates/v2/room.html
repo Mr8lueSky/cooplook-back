@@ -306,6 +306,11 @@
                         margin-bottom: 10px;
                         color: aliceblue;
                 }
+		.video-desc {
+                        font-size: 18px;
+                        margin-bottom: 10px;
+                        color: aliceblue;
+                }
         </style>
 </head>
 
@@ -362,6 +367,7 @@
                                 {% else %}
                                 {% endif %}
                                 {% endfor %}
+				<p class="video-desc">{{ room.description }}</p>
                         </div>
                 </div>
         </main>
@@ -404,11 +410,16 @@
                                         <label for="imageUrl" style="color: white; display: block; margin-bottom: 10px;">Image (link)</label>
                                         <input maxlength=255 type="url" id="imageUrl" name="img_link" placeholder="https://example.com/image.jpg" value="{{ room.img_link }}" style="color: white; background-color: #2a2a2a; width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444;">
                                 </div>
+				<div class="form-group">
+                                        <label for="description" style="color: white; display: block; margin-bottom: 10px;">Description</label>
+					<input maxlength=255 type="text" id="description" name="description" placeholder="Description" style="color: white; background-color: #2a2a2a; width: 100%; padding: 10px; border-radius: 4px; border: 1px solid #444;" value="{{ room.description }}">
+                                </div>
 
                                 <div style="display: flex; justify-content: space-between; margin-top: 30px;">
 
                                         <input type="submit" class="btn" style="background-color: #2C8C2B; color: white; border: none; padding: 14px 25px; border-radius: 6px; cursor: pointer; font-size: 18px; font-weight: 500; text-align: center; transition: background-color 0.3s;" value="Apply">
                                 </div>
+
                         </form>
                 </div>
         </div>

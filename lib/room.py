@@ -83,6 +83,7 @@ class Room:
         img_link: str,
         status_storage: StatusHandler,
         video_source: VideoSource,
+        description: str
     ):
         self.room_id: UUID = room_id
         self.name: str = name
@@ -96,6 +97,7 @@ class Room:
             status_storage, cmd_handler, conn_manager
         )
         self.last_leave: float = time.time()
+        self.description: str = description
 
     @classmethod
     def from_model(cls, model: RoomModel) -> "Room":
@@ -105,6 +107,7 @@ class Room:
             img_link=model.img_link,
             status_storage=StatusHandler.from_model(model),
             video_source=VideoSource.from_model(model),
+            description=model.description
         )
 
     def update_model(self, model: RoomModel):
@@ -164,7 +167,7 @@ class RoomStorage:
     @classmethod
     async def load_room(
         cls, session: AsyncSession, room_id: UUID, ignore_if_loaded: bool = True
-    ):
+    ) -> None:
         async with cls.lock:
             if room_id in cls.loaded_rooms and ignore_if_loaded:
                 return

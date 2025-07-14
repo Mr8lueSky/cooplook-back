@@ -21,6 +21,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
     video_source: Mapped[VideoSourcesEnum]
     video_source_data: Mapped[str] = mapped_column(String(256))
     img_link: Mapped[str] = mapped_column(String(256))
+    description: Mapped[str] = mapped_column(String(256), default="")
     room_id: Mapped[UUID] = mapped_column(Uuid, primary_key=True, default_factory=uuid1)
     last_file_ind: Mapped[int] = mapped_column(default=0)
     last_watch_ts: Mapped[float] = mapped_column(default=0)
@@ -64,6 +65,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         vs_enum: VideoSourcesEnum | None = None,
         video_source_data: str | None = None,
         img_link: str | None = None,
+        description: str = "",
     ):
         values = {}
         if last_watch_ts is not None:
@@ -77,7 +79,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["video_source_data"] = video_source_data
         if img_link is not None:
             values["img_link"] = img_link
-
+        values["description"] = description
         stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
         await session.execute(stmt)
 
@@ -94,6 +96,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
         vs_enum: VideoSourcesEnum,
         vs_data: str,
         img_link: str,
+        description: str = "",
     ) -> "RoomModel":
         if await cls.exists_with_name(session, name):
             raise BadRequest("Room with same name already exists!")
@@ -102,6 +105,7 @@ class RoomModel(MappedAsDataclass, BaseModel):
             video_source=vs_enum,
             video_source_data=vs_data,
             img_link=img_link,
+            description=description,
         )
         session.add(rm)
         await session.flush()
