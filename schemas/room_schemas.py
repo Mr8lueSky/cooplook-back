@@ -1,5 +1,6 @@
+from abc import ABC
 from dataclasses import dataclass
-from typing import Annotated, Any, Callable, Optional
+from typing import Annotated, Any, Callable
 from uuid import UUID
 
 import libtorrent as lt
@@ -8,7 +9,7 @@ from pydantic import Field, StringConstraints, model_validator
 from pydantic_core import core_schema
 
 from config import MAX_TORRENT_FILE_SIZE
-from exceptions import ContentTooLarge, UnprocessableEntity
+from lib.http_exceptions import ContentTooLarge, UnprocessableEntity
 from schemas.base_schema import BaseSchema
 
 RoomNameField = Annotated[
@@ -49,29 +50,33 @@ class FileSizeValidator:
         )
 
 
-class CreateRoomSchema(BaseSchema):
+class CreateRoomSchema(BaseSchema, ABC):
     name: RoomNameField
     img_link: LinkField
+    description: Annotated[str, StringConstraints(max_length=256)]
 
 
 class CreateRoomLinkSchema(CreateRoomSchema):
     video_link: LinkField
 
 
-class UpdateSourceToLink(CreateRoomSchema):
+class UpdateRoomSchema(CreateRoomSchema, ABC): ...
+
+
+class UpdateRoomLinkSchema(UpdateRoomSchema):
     video_link: LinkField | None = None
 
 
-class UpdateSourceToTorrentSchema(CreateRoomSchema):
+class WithTorrentFileSchema(BaseSchema):
     torrent_file: (
         Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)] | None
     ) = None
-    file_content: bytes | None = Field(
+    file_content: bytes = Field(
         init=False, init_var=False, exclude=True, default_factory=bytes
     )
 
     @model_validator(mode="after")
-    def set_content(cls, values):
+    def validate_is_torrent_file(cls, values):
         if values.torrent_file is None:
             return values
         values.file_content = values.torrent_file.file.read()
@@ -80,24 +85,19 @@ class UpdateSourceToTorrentSchema(CreateRoomSchema):
         return values
 
 
-class CreateRoomTorrentSchema(CreateRoomSchema):
-    torrent_file: Annotated[UploadFile, FileSizeValidator(MAX_TORRENT_FILE_SIZE)]
-    file_content: bytes = Field(
-        init=False, init_var=False, exclude=True, default_factory=bytes
-    )
+class UpdateRoomTorrentSchema(UpdateRoomSchema, WithTorrentFileSchema): ...
 
-    @model_validator(mode="after")
-    def set_content(cls, values):
-        values.file_content = values.torrent_file.file.read()
-        if not is_valid_torrent(values.file_content):
-            raise UnprocessableEntity("Not a valid torrent")
-        return values
+
+class CreateRoomTorrentSchema(CreateRoomSchema, WithTorrentFileSchema): ...
+
 
 class GetRoomSchema(CreateRoomSchema):
     room_id: UUID
+    name: RoomNameField
+    img_link: LinkField
 
 
 class GetRoomWatchingSchema(GetRoomSchema):
     files: list[tuple[int, str]]
     curr_fi: int
-    video: Optional[str]
+    video: str | None

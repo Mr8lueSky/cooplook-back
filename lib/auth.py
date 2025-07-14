@@ -7,8 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
 from config import ACCESS_TOKEN_EXPIRE, AUTH_SECRET_KEY
-from engine import async_session_maker
-from exceptions import NotFound
+from lib.engine import async_session_maker
+from lib.http_exceptions import NotFound
 from models.user_model import UserModel
 from schemas.user_schema import GetUserSchema
 

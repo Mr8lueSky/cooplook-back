@@ -6,17 +6,17 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
 from config import PW_SECRET_KET
-from exceptions import NotFound
+from lib.http_exceptions import NotFound
 from models.base import BaseModel
 
 
 class UserModel(MappedAsDataclass, BaseModel):
     __tablename__ = "users"
 
-    name: Mapped[str] = mapped_column(String(32))
+    name: Mapped[str] = mapped_column(String(32), unique=True)
     pwhash: Mapped[str] = mapped_column(String(60))
     salt: Mapped[str] = mapped_column(String(29))
-    user_id: Mapped[UUID] = mapped_column(primary_key=True, default_factory=uuid1)
+    user_id: Mapped[UUID] = mapped_column(primary_key=True, default_factory=uuid1, unique=True)
 
     @classmethod
     async def get_id(cls, session: AsyncSession, user_id: UUID) -> "UserModel":

@@ -1,4 +1,5 @@
 {
         "venv": "venv",
-        "typeCheckingMode": "standard"
+	"reportImplicitAbstractClass": true,
+	"reportIncompatibleVariableOverride": false
 }
