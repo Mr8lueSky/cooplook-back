@@ -234,9 +234,11 @@ videoElem.addEventListener("waiting", () => {
         sendStatus(SUSPEND)
 })
 videoElem.addEventListener("canplaythrough", () => {
-        waiting = false;
-        console.log("Set status UNSUSPEND from canplaythrough event")
-        sendCommand(UNSUSPEND, videoElem.currentTime)
+	if (waiting){
+		console.log("Set status UNSUSPEND from canplaythrough event")
+		sendCommand(UNSUSPEND, videoElem.currentTime)
+		waiting = false;
+	}
 })
 
 
