@@ -30,11 +30,13 @@ class PieceGetter:
         if not self.torrent.have_piece(piece_id):
             raise PieceHaveTimeoutException(f"No piece {piece_id} in {timeout_s}")
 
-    async def handle_read_piece_alert(self, alert: Alert) -> None:
+    def handle_read_piece_alert(self, alert: Alert) -> None:
         if not isinstance(alert, ReadPieceAlert):
             raise RuntimeError(
                 f"Alert is not a type of read_piece_alert! Actual type: {type(alert)}"
             )
+        if alert.piece not in self.piece_wait_count:
+            return
         self.piece_buffer[alert.piece] = alert.buffer
 
     async def wait_piece_read(self, piece_id: int, timeout_s: int = 60):

@@ -32,6 +32,7 @@ class Torrent(Logging):
         )
         self.save_path: str = save_path
         self.files: lt.file_storage = self.ti.files()
+        self.deadlines: dict[int, int] = {}
 
     def cleanup(self):
         self.logger.debug(f"Removing torrent handle for {self.save_path}")
@@ -53,12 +54,17 @@ class Torrent(Logging):
         return PiecePriority(self.th.piece_priority(piece_id))
 
     def set_piece_deadline(self, piece_id: int, deadline_s: int, flags: int = 0):
-        self.logger.debug(f"Setting deadline for piece {piece_id} to {deadline_s}")
-        self.th.set_piece_deadline(piece_id, deadline_s, flags)
+        if self.have_piece(piece_id):
+            return
+        current_deadline = self.deadlines.get(piece_id, float('inf'))
+        if deadline_s < current_deadline:
+            self.logger.debug(f"Setting deadline for piece {piece_id} to {deadline_s}")
+            self.th.set_piece_deadline(piece_id, deadline_s, flags)
 
     def clear_deadlines(self):
         self.logger.debug(f"Clearing deadlines for {self.save_path}")
         self.th.clear_piece_deadlines()
+        self.deadlines.clear()
 
     def pieces_count(self) -> int:
         return self.ti.num_pieces()

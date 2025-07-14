@@ -14,7 +14,7 @@ WAIT_FILE_READY_SLEEP = 0
 
 
 class FileTorrentHandler(Logging):
-    PIECE_PRELOAD = 30
+    PIECE_PRELOAD: int = 30
 
     def __init__(self, torrent: Torrent, file_index: int) -> None:
         self.torrent: Torrent = torrent
@@ -103,7 +103,7 @@ class FileTorrentHandler(Logging):
 
         for piece_id in range(piece_start + 1, piece_end):
             self.torrent.set_piece_deadline(
-                piece_id, max(piece_id + self.PIECE_PRELOAD, piece_end + 1) * 100
+                piece_id, self.PIECE_PRELOAD * 100
             )
             yield await self.piece_getter.get_piece(piece_id)
 

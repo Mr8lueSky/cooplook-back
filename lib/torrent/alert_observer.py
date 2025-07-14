@@ -7,10 +7,10 @@ from typing import Callable
 from lib.logger import Logging
 from lib.torrent.torrent import Alert, Torrent
 
-OBSERVE_ALERTS_SLEEP = 0.5
+OBSERVE_ALERTS_SLEEP = 0.1
 
 AlertType = type[Alert]
-NotifyAlert = Callable[[Alert], Awaitable[None]]
+NotifyAlert = Callable[[Alert], None]
 
 
 class AlertObserver(Logging):
@@ -28,7 +28,7 @@ class AlertObserver(Logging):
                 alert_type = type(a)
                 self.logger.debug(f"Got alert: {a}")
                 for observer in self.alert_observers[alert_type]:
-                    await observer(a)
+                    observer(a)
             await sleep(OBSERVE_ALERTS_SLEEP)
 
     def cleanup(self):
