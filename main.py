@@ -23,7 +23,7 @@ from starlette.responses import HTMLResponse, JSONResponse, RedirectResponse
 from lib.auth import current_user, generate_token
 from config import ACCESS_TOKEN_EXPIRE
 from lib.connections import Connection
-from lib.engine import async_session_maker, create_all, create_users
+from lib.engine import async_session_maker, create_users
 from lib.http_exceptions import HTTPException
 from models.room_model import RoomModel
 from lib.room import RoomStorage, monitor_rooms
@@ -41,7 +41,6 @@ from templates import get_template_response
 
 app = FastAPI()
 
-app.add_event_handler("startup", create_all)
 app.add_event_handler("startup", monitor_rooms)
 app.add_event_handler("startup", create_users)
 app.add_event_handler("shutdown", RoomStorage.full_cleanup)
