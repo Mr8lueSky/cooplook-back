@@ -5,10 +5,11 @@ from typing import Callable
 
 
 from lib.logger import Logging
-from lib.torrent.torrent import Alert, AlertType, Torrent
+from lib.torrent.torrent import Alert, Torrent
 
-OBSERVE_ALERTS_SLEEP = 0
+OBSERVE_ALERTS_SLEEP = 0.5
 
+AlertType = type[Alert]
 NotifyAlert = Callable[[Alert], Awaitable[None]]
 
 

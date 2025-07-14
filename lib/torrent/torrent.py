@@ -5,9 +5,10 @@ import libtorrent as lt
 
 
 Alert = lt.alert
-AlertType = type[Alert]
 TorrentAlert = lt.torrent_alert
 ReadPieceAlert = lt.read_piece_alert
+
+EXTENSIONS = ("ut_pex", "ut_metadata", "smart_ban", "metadata_transfoer")
 
 
 class PiecePriority(int, Enum):
@@ -22,9 +23,9 @@ class PiecePriority(int, Enum):
 
 class Torrent(Logging):
     def __init__(self, torrent_path: str, save_path: str):
-        self.session: lt.session = lt.session(
-            {"enable_incoming_utp": False, "enable_incoming_tcp": False}
-        )
+        self.session: lt.session = lt.session()
+        for extension in EXTENSIONS:
+            self.session.add_extension(extension)
         self.ti: lt.torrent_info = lt.torrent_info(torrent_path)
         self.th: lt.torrent_handle = self.session.add_torrent(
             {"ti": self.ti, "save_path": save_path}
