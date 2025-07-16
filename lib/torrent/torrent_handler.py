@@ -29,8 +29,8 @@ class FileTorrentHandler(Logging):
         piece_end, _ = self.torrent.piece_bytes_offset(
             self.file_index, self.torrent.file_size(self.file_index)
         )
-        self.torrent.set_piece_deadline(piece_start, PiecePriority.HIGHEST)
-        self.torrent.set_piece_deadline(piece_end, PiecePriority.HIGHEST)
+        self.torrent.set_piece_deadline(piece_start, 0)
+        self.torrent.set_piece_deadline(piece_end, 0)
         _ = asyncio.create_task(self.alert_observer.observe_alerts())
 
     @property
@@ -91,7 +91,7 @@ class FileTorrentHandler(Logging):
         for piece_id in range(
             piece_start, min(piece_start + self.PIECE_PRELOAD, piece_end + 1)
         ):
-            self.torrent.set_piece_deadline(piece_id, (piece_id - piece_start) * 1000)
+            self.torrent.set_piece_deadline(piece_id, (piece_id - piece_start) * 10)
 
         if piece_start == piece_end:
             yield (await self.piece_getter.get_piece(piece_start))[
@@ -103,9 +103,12 @@ class FileTorrentHandler(Logging):
 
         for piece_id in range(piece_start + 1, piece_end):
             self.torrent.set_piece_deadline(
-                piece_id, self.PIECE_PRELOAD * 100
+                piece_id, 0
             )
             yield await self.piece_getter.get_piece(piece_id)
+            self.torrent.set_piece_deadline(
+                piece_id + self.PIECE_PRELOAD, self.PIECE_PRELOAD * 10
+            )
 
         if piece_end != piece_start:
             yield (await self.piece_getter.get_piece(piece_end))[:end_offset]

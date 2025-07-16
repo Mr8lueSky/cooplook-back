@@ -1,13 +1,12 @@
 from asyncio import sleep
 from collections import defaultdict
-from collections.abc import Awaitable
 from typing import Callable
 
 
 from lib.logger import Logging
 from lib.torrent.torrent import Alert, Torrent
 
-OBSERVE_ALERTS_SLEEP = 0.1
+OBSERVE_ALERTS_SLEEP = 0
 
 AlertType = type[Alert]
 NotifyAlert = Callable[[Alert], None]

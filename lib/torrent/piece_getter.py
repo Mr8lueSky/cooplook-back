@@ -40,6 +40,8 @@ class PieceGetter:
         self.piece_buffer[alert.piece] = alert.buffer
 
     async def wait_piece_read(self, piece_id: int, timeout_s: int = 60):
+        if piece_id in self.piece_buffer:
+            return
         self.torrent.read_piece(piece_id)
         self.alert_observer.add_alert_observer(
             lt.read_piece_alert, self.handle_read_piece_alert

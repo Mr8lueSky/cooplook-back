@@ -30,6 +30,7 @@ class Torrent(Logging):
         self.th: lt.torrent_handle = self.session.add_torrent(
             {"ti": self.ti, "save_path": save_path}
         )
+        self.th.set_sequential_download(True)
         self.save_path: str = save_path
         self.files: lt.file_storage = self.ti.files()
         self.deadlines: dict[int, int] = {}
