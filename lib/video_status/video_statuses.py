@@ -35,7 +35,7 @@ class PlayStatus(VideoStatus):
         return self._video_time + time.time() - self._status_creation
 
     @video_time.setter
-    def video_time(self, new_time: float):  # pyright: ignore[reportIncompatibleVariableOverride]
+    def video_time(self, new_time: float):
         self._video_time = new_time
         self._status_creation = time.time()
 

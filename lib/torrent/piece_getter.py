@@ -50,7 +50,9 @@ class PieceGetter:
         while time() < finish and piece_id not in self.piece_buffer:
             await sleep(WAIT_PIECE_READ_SLEEP)
         if piece_id not in self.piece_buffer:
-            raise PieceReadTimeoutException(f"Can't read {piece_id} in {timeout_s}!")
+            raise PieceReadTimeoutException(
+                f"Can't read {piece_id} in {timeout_s}!'\nPiece priority: {self.torrent.get_piece_priority(piece_id)}"
+            )
 
     def require_piece(self, piece_id: int):
         self.piece_wait_count[piece_id] = self.piece_wait_count.get(piece_id, 0) + 1
@@ -73,5 +75,3 @@ class PieceGetter:
             raise exc
         finally:
             self.not_require_piece(piece_id)
-
-
