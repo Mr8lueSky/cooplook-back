@@ -4,7 +4,7 @@ from typing import Callable
 
 
 from lib.logger import Logging
-from lib.torrent.torrent import Alert, Torrent
+from lib.torrent.torrent_info import Alert, TorrentInfo
 
 OBSERVE_ALERTS_SLEEP = 0
 
@@ -13,11 +13,11 @@ NotifyAlert = Callable[[Alert], None]
 
 
 class AlertObserver(Logging):
-    def __init__(self, torrent: Torrent) -> None:
+    def __init__(self, torrent: TorrentInfo) -> None:
         self.alert_observers: defaultdict[AlertType, list[NotifyAlert]] = defaultdict(
             list
         )
-        self.torrent: Torrent = torrent
+        self.torrent: TorrentInfo = torrent
         self.observe: bool = True
 
     async def observe_alerts(self):

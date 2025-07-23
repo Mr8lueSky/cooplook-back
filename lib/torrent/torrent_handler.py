@@ -8,7 +8,7 @@ from time import time
 from lib.logger import Logging
 from lib.torrent.alert_observer import AlertObserver
 from lib.torrent.piece_getter import PieceGetter
-from lib.torrent.torrent import PiecePriority, Torrent
+from lib.torrent.torrent_info import PiecePriority, TorrentInfo
 
 WAIT_FILE_READY_SLEEP = 0
 
@@ -16,8 +16,8 @@ WAIT_FILE_READY_SLEEP = 0
 class FileTorrentHandler(Logging):
     PIECE_PRELOAD: int = 30
 
-    def __init__(self, torrent: Torrent, file_index: int) -> None:
-        self.torrent: Torrent = torrent
+    def __init__(self, torrent: TorrentInfo, file_index: int) -> None:
+        self.torrent: TorrentInfo = torrent
         self.dont_download_everything()
         self.alert_observer: AlertObserver = AlertObserver(self.torrent)
         self.file_index: int = file_index

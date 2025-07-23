@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 import config
 from lib.custom_responses import LoadingTorrentFileResponse
-from lib.torrent.torrent import Torrent
+from lib.torrent.torrent_info import TorrentInfo
 from models.room_model import RoomModel, VideoSourcesEnum
 from lib.torrent.torrent_handler import FileTorrentHandler
 
@@ -77,7 +77,7 @@ class HttpLinkVideoSource(VideoSource):
 
 
 class SortedToTorrentFileIndex:
-    def __init__(self, torrent: Torrent) -> None:
+    def __init__(self, torrent: TorrentInfo) -> None:
         files: list[tuple[int, str]] = [
             (i, torrent.get_file_name(i)) for i in range(torrent.files_count())
         ]
@@ -104,7 +104,7 @@ class TorrentVideoSource(VideoSource):
         self.folder_id: UUID = uuid1()
         os.makedirs(self.save_path, exist_ok=True)
         self.torrent_path: str = torrent_path
-        self.torrent: Torrent = Torrent(self.torrent_path, self.save_path)
+        self.torrent: TorrentInfo = TorrentInfo(self.torrent_path, self.save_path)
         self.torrent_manager: FileTorrentHandler = FileTorrentHandler(
             self.torrent, self.file_index
         )

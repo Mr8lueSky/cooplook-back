@@ -9,7 +9,7 @@ from lib.torrent.exceptions import (
     PieceReadTimeoutException,
     PieceTimeoutException,
 )
-from lib.torrent.torrent import Alert, ReadPieceAlert, Torrent
+from lib.torrent.torrent_info import Alert, ReadPieceAlert, TorrentInfo
 
 
 WAIT_PIECE_HAVE_SLEEP = 0
@@ -17,10 +17,10 @@ WAIT_PIECE_READ_SLEEP = 0
 
 
 class PieceGetter:
-    def __init__(self, torrent: Torrent, alert_observer: AlertObserver) -> None:
+    def __init__(self, torrent: TorrentInfo, alert_observer: AlertObserver) -> None:
         self.piece_wait_count: dict[int, int] = {}
         self.piece_buffer: dict[int, bytes] = {}
-        self.torrent: Torrent = torrent
+        self.torrent: TorrentInfo = torrent
         self.alert_observer: AlertObserver = alert_observer
 
     async def wait_piece_have(self, piece_id: int, timeout_s: int = 60):

@@ -47,7 +47,7 @@ async def current_user(token: Annotated[str | None, Cookie()] = None) -> GetUser
         username = payload.get("sub")
         if username is None:
             raise logout_resp
-    except jwt.InvalidTokenError as exc:
+    except jwt.InvalidTokenError:
         raise logout_resp
     async with async_session_maker.begin() as session:
         user = await UserModel.get_name(session, username)
