@@ -1,5 +1,15 @@
 {
-        "venv": "venv",
-	"reportImplicitAbstractClass": true,
-	"reportIncompatibleVariableOverride": false
+  "venv": "venv",
+  "reportImplicitAbstractClass": true,
+  "reportIncompatibleVariableOverride": false,
+  "pythonVersion": "3.13",
+  "include": [
+    "tests"
+  ],
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "pythonVersion": "3.13"
+    }
+  ]
 }
