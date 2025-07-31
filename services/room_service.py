@@ -25,7 +25,9 @@ class RoomCreator(ABC):
 
     @classmethod
     @abstractmethod
-    async def create(cls, session: AsyncSession, data: CreateRoomSchema) -> UUID: ...
+    async def create(
+        cls, session: AsyncSession, data: CreateRoomSchema
+    ) -> RoomModel: ...
 
     @classmethod
     @abstractmethod
@@ -66,7 +68,7 @@ class TorrentRoomCreator(RoomCreator):
 
     @classmethod
     @override
-    async def create(cls, session: AsyncSession, data: CreateRoomSchema) -> UUID:
+    async def create(cls, session: AsyncSession, data: CreateRoomSchema) -> RoomModel:
         if not isinstance(data, CreateRoomTorrentSchema):
             raise TypeError("Given data is not a create torrent schema!")
         torrent_fpth = await cls.create_torrent_file(data.file_content)
@@ -78,7 +80,7 @@ class TorrentRoomCreator(RoomCreator):
             data.img_link,
             data.description
         )
-        return r.room_id
+        return r
 
     @classmethod
     @override
@@ -108,7 +110,7 @@ class LinkRoomCreator(RoomCreator):
 
     @classmethod
     @override
-    async def create(cls, session: AsyncSession, data: CreateRoomSchema) -> UUID:
+    async def create(cls, session: AsyncSession, data: CreateRoomSchema) -> RoomModel:
         if not isinstance(data, CreateRoomLinkSchema):
             raise TypeError("Given data is not a create link schema!")
         r = await RoomModel.create(
@@ -119,7 +121,7 @@ class LinkRoomCreator(RoomCreator):
             data.img_link,
             data.description
         )
-        return r.room_id
+        return r
 
     @classmethod
     @override
@@ -143,7 +145,7 @@ class RoomService:
     @classmethod
     async def create_room(
         cls, session: AsyncSession, room_data: CreateRoomSchema
-    ) -> UUID:
+    ) -> RoomModel:
         creator = RoomFactory.get_room_factory(room_data)
         room_id = await creator.create(session, room_data)
         return room_id
