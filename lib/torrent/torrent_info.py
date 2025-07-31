@@ -36,6 +36,10 @@ class PiecePriority(int, Enum):
     HIGHEST = 6
 
 
+class SetDeadlineFlags(int, Enum):
+    ALERT_WHEN_AVAILABLE = 1
+
+
 def create_torrent_session() -> lt.session:
     session = lt.session(DEFAULT_SESSION_ARGS)
     for extension in EXTENSIONS:
