@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
+from typing import Annotated, override
 
 from fastapi.security.oauth2 import OAuth2PasswordBearer
 import jwt
-from fastapi import Depends, HTTPException
+from fastapi import Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -17,7 +17,20 @@ from schemas.user_schemas import GetUserSchema
 ALGORITHM = "HS256"
 
 
-oauth2_scheme = OAuth2PasswordBearer("auth")
+class OAuth2BearerCookie(OAuth2PasswordBearer):
+    @override
+    async def __call__(self, request: Request) -> str | None:
+        token = None
+        try:
+            token = await super().__call__(request)
+        except HTTPException:
+            token = request.cookies.get("token")
+        if token is None:
+            raise HTTPException(401, "Not authenticated")
+        return token
+
+
+oauth2_scheme = OAuth2BearerCookie("auth")
 
 
 async def authenticate_user(session: AsyncSession, username: str, password: str):
@@ -39,7 +52,6 @@ def create_access_token(data: dict[str, int | str], expires_delta: timedelta) ->
 
 async def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> GetUserSchema:
     unauthorized_resp = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
-
     try:
         payload = jwt.decode(token, AUTH_SECRET_KEY, ALGORITHM)
         username: str = payload.get("sub")
