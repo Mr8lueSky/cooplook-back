@@ -58,7 +58,10 @@ async def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> GetUser
     except jwt.InvalidTokenError:
         raise unauthorized_resp
     async with async_session_maker.begin() as session:
-        user = await UserModel.get_name(session, username)
+        try:
+            user = await UserModel.get_name(session, username)
+        except NotFound:
+            raise unauthorized_resp
     return GetUserSchema.model_validate(user, from_attributes=True)
 
 
