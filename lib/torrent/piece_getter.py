@@ -74,7 +74,8 @@ class PieceGetter:
         )
 
     def not_require_piece(self, piece_id: int):
-        self.piece_wait_count[piece_id] -= 1
+        if self.piece_wait_count:
+            self.piece_wait_count[piece_id] -= 1
         if self.piece_wait_count[piece_id] <= 0:
             _ = self.piece_wait_count.pop(piece_id, None)
             _ = self.piece_buffer.pop(piece_id, None)

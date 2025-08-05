@@ -74,8 +74,6 @@ class TorrentInfo(Logging):
         )
 
     def set_piece_deadline(self, piece_id: int, deadline_s: int, flags: int = 0):
-        if self.have_piece(piece_id):
-            return
         self.logger.debug(f"Setting deadline for piece {piece_id} to {deadline_s}")
         self.th.set_piece_deadline(piece_id, deadline_s, flags)
 

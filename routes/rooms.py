@@ -3,6 +3,7 @@ from uuid import UUID
 from fastapi import (
     APIRouter,
     Depends,
+    Form,
     Request,
     Response,
 )
@@ -28,7 +29,7 @@ rooms_router = APIRouter()
 
 @rooms_router.post("/link", status_code=status.HTTP_201_CREATED)
 async def create_room_link(
-    room: CreateRoomLinkSchema,
+    room: CreateRoomLinkSchema = Form(),  # pyright: ignore[reportCallInDefaultInitializer]
     _: GetUserSchema = Depends(
         current_user
     ),  # pyright: ignore[reportCallInDefaultInitializer]
@@ -40,7 +41,7 @@ async def create_room_link(
 
 @rooms_router.post("/torrent", status_code=status.HTTP_201_CREATED)
 async def create_room_torrent(
-    room: CreateRoomTorrentSchema,
+    room: CreateRoomTorrentSchema = Form(),  # pyright: ignore[reportCallInDefaultInitializer]
     _: GetUserSchema = Depends(
         current_user
     ),  # pyright: ignore[reportCallInDefaultInitializer]
@@ -53,7 +54,7 @@ async def create_room_torrent(
 @rooms_router.put("/{room_id}/torrent")
 async def update_room_to_torrent(
     room_id: UUID,
-    room_data: UpdateRoomTorrentSchema,
+    room_data: UpdateRoomTorrentSchema = Form(),  # pyright: ignore[reportCallInDefaultInitializer]
     _: GetUserSchema = Depends(
         current_user
     ),  # pyright: ignore[reportCallInDefaultInitializer]
@@ -65,7 +66,7 @@ async def update_room_to_torrent(
 @rooms_router.put("/{room_id}/link")
 async def update_room_to_link(
     room_id: UUID,
-    room_data: UpdateRoomLinkSchema,
+    room_data: UpdateRoomLinkSchema = Form(),  # pyright: ignore[reportCallInDefaultInitializer]
     _: GetUserSchema = Depends(
         current_user
     ),  # pyright: ignore[reportCallInDefaultInitializer]
