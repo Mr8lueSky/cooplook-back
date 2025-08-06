@@ -19,15 +19,15 @@ if ENV == "DEV":
         allow_headers=["*"],
     )
 
-app.add_event_handler(
+app.add_event_handler(  # pyright: ignore[reportUnknownMemberType]
     "startup", monitor_rooms
-)  # pyright: ignore[reportUnknownMemberType]
-app.add_event_handler(
+)
+app.add_event_handler(  # pyright: ignore[reportUnknownMemberType]
     "startup", create_users
-)  # pyright: ignore[reportUnknownMemberType]
-app.add_event_handler(
+)
+app.add_event_handler(  # pyright: ignore[reportUnknownMemberType]
     "shutdown", RoomStorage.full_cleanup
-)  # pyright: ignore[reportUnknownMemberType]
+)
 
 register_exception_handlers(app)
 
