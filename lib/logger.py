@@ -1,13 +1,12 @@
 import logging
 
-
 def create_logger(name: str) -> logging.Logger:
     logger = logging.getLogger(name)
     logging.basicConfig(
         filename="logging.log",
         encoding="utf-8",
         level=logging.DEBUG,
-        format="%(asctime)s :%(levelname)s: [%(name)s] %(message)s",
+        format="%(asctime)s :%(levelname)s: |%(filename)s:%(lineno)d| [%(name)s] %(message)s",
     )
     return logger
 

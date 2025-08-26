@@ -1,16 +1,23 @@
+import socket
+from traceback import format_exc
 from uuid import UUID
 
 from fastapi import (
     APIRouter,
     Depends,
     Form,
+    Path,
     Request,
     Response,
+    WebSocket,
+    WebSocketDisconnect,
 )
 from starlette import status
 
 from lib.auth import current_user
+from lib.connections import Connection
 from lib.engine import async_session_maker
+from lib.logger import create_logger
 from models.room_model import RoomModel
 from lib.room import RoomStorage
 from schemas.room_schemas import (
@@ -25,6 +32,7 @@ from schemas.user_schemas import GetUserSchema
 from services.room_service import RoomService
 
 rooms_router = APIRouter()
+logger = create_logger("rooms-ws")
 
 
 @rooms_router.post("/link", status_code=status.HTTP_201_CREATED)
@@ -127,3 +135,39 @@ async def list_rooms(
             )
             for r in rooms
         ]
+
+
+@rooms_router.websocket("/{room_id}/ws")
+async def syncing(
+    websocket: WebSocket,
+    room_id: UUID = Path(),  # pyright: ignore[reportCallInDefaultInitializer]
+    current_user: GetUserSchema = Depends(
+        current_user
+    ),  # pyright: ignore[reportCallInDefaultInitializer]
+):
+    async with async_session_maker.begin() as session:
+        room = await RoomStorage.get_room(session, room_id)
+    conn = Connection(websocket)
+    room_user = await room.add_connection(conn, current_user)
+    while True:  # TODO: while app is working
+        try:
+            msg = await conn.recieve()
+            logger.debug(f"Recieved {msg} from {room_user.conn_id}")
+            await room.handle_cmd_str(msg, room_user)
+            async with async_session_maker.begin() as session:
+                await RoomStorage.save_room(session, room_id)
+        except WebSocketDisconnect:
+            logger.debug(f"{room_user.conn_id} disconnected!")
+            break
+        except RuntimeError as exc:
+            logger.error(f"{room_user.conn_id}: {exc}! Disconnecting.")
+            break
+        except socket.error as exc:
+            logger.error(f"{room_user.conn_id}: {exc}! Disconnecting.")
+            break
+        except Exception as exc:
+            logger.error(
+                f"Got an error from {room_user.conn_id}: {type(exc)} {exc}\n{format_exc()}"
+            )
+            break
+    await room.remove_connection(room_user.conn_id)

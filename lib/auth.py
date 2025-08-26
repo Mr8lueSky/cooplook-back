@@ -1,9 +1,10 @@
 from datetime import datetime, timedelta, timezone
 from typing import Annotated, override
-
+from fastapi.datastructures import Headers
 from fastapi.security.oauth2 import OAuth2PasswordBearer
+from fastapi.security.utils import get_authorization_scheme_param
 import jwt
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -18,15 +19,28 @@ ALGORITHM = "HS256"
 
 
 class OAuth2BearerCookie(OAuth2PasswordBearer):
+    def handle_header(self, headers: Headers):
+        authorization = headers.get("Authorization")
+        scheme, param = get_authorization_scheme_param(authorization)
+        if not authorization or scheme.lower() != "bearer":
+            return None
+        return param
+
+    def handle_cookie(self, cookies: dict[str, str]):
+        return cookies.get("token")
+
     @override
-    async def __call__(self, request: Request) -> str | None:
-        token = None
-        try:
-            token = await super().__call__(request)
-        except HTTPException:
-            token = request.cookies.get("token")
+    async def __call__(
+        self,
+        request: Request = None,  # pyright: ignore[reportArgumentType]
+        websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]
+    ) -> str | None:
+        provider = request or websocket
+        token = self.handle_header(provider.headers) or self.handle_cookie(
+            provider.cookies
+        )
         if token is None:
-            raise HTTPException(401, "Not authenticated")
+            raise HTTPException(401, "Unauthorized")
         return token
 
 

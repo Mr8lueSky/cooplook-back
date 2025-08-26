@@ -58,8 +58,8 @@ class StatusHandler(Logging):
         return self
 
     def set_pause_status(self) -> Self:
-        if not isinstance(self.status, PlayStatus):
-            return self
+        # if not isinstance(self.status, PlayStatus):
+        #     return self
         self.status = PauseStatus.from_status(self.status)
         return self
 

@@ -44,6 +44,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
     async def _download_range(self, start: int, end: int):
         async for buffer in self.torrent_handler.iter_pieces(start, end):
             yield buffer, True
+            await asyncio.sleep(0)
         yield b"", False
 
     async def _download_single_range(self, send: Send, start: int, end: int):

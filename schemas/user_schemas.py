@@ -12,6 +12,11 @@ class GetUserSchema(BaseSchema):
     name: str = UsernameField
 
 
+class UserRoomSchema(BaseSchema):
+    conn_id: int
+    user_data: GetUserSchema
+
+
 class LoginUserSchema(BaseSchema):
     username: str = UsernameField
     password: str = PasswordField
