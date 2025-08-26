@@ -7,6 +7,7 @@ from lib.logger import Logging
 from fastapi import WebSocket
 
 from lib.commands.server_commands import ServerCommand
+from schemas.user_schemas import GetUserSchema, UserRoomSchema, UsersListSchema
 
 
 @dataclass
@@ -32,6 +33,7 @@ class Connection(Logging):
 @dataclass
 class ConnectionsManager:
     conns: dict[int, Connection] = field(default_factory=dict)
+    conns_users: dict[int, UserRoomSchema] = field(default_factory=dict)
     conn_id_iter: Iterator[int] = field(default_factory=count)
 
     async def send_to(self, conn_id: int, cmd: ServerCommand):
@@ -43,14 +45,21 @@ class ConnectionsManager:
         except Exception as exc:
             raise RuntimeError(f"It's here: {exc}")
 
-    async def add_connection(self, conn: Connection) -> int:
+    def get_users(self) -> UsersListSchema:
+        return UsersListSchema(users=list(self.conns_users.values()))
+
+    async def add_connection(
+        self, conn: Connection, user: GetUserSchema
+    ) -> UserRoomSchema:
         await conn.accept()
         conn_id = next(self.conn_id_iter)
         self.conns[conn_id] = conn
-        return conn_id
+        self.conns_users[conn_id] = UserRoomSchema(conn_id=conn_id, user_data=user)
+        return self.conns_users[conn_id]
 
     def remove_connection(self, conn_id: int):
         _ = self.conns.pop(conn_id)
+        _ = self.conns_users.pop(conn_id)
 
     async def send_room(self, cmd: ServerCommand, exclude: list[int] | None = None):
         exclude = exclude or []

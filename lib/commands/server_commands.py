@@ -3,7 +3,7 @@ from dataclasses import dataclass
 import json
 from typing import override
 
-from schemas.user_schemas import UserRoomSchema
+from schemas.user_schemas import UserRoomSchema, UsersListSchema
 
 
 class ServerCommand(ABC):
@@ -65,9 +65,19 @@ class UserConnectedCommand(ServerCommand):
 
 
 @dataclass
+class UsersListCommand(ServerCommand):
+    users: UsersListSchema
+    prefix: str = "ua"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {self.users.model_dump_json()}"
+
+
+@dataclass
 class UserDisconnectedCommand(ServerCommand):
     user_id: int
-    prefix: str = "uc"
+    prefix: str = "ud"
 
     @override
     def to_string(self) -> str:

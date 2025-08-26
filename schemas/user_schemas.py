@@ -17,6 +17,10 @@ class UserRoomSchema(BaseSchema):
     user_data: GetUserSchema
 
 
+class UsersListSchema(BaseSchema):
+    users: list[UserRoomSchema]
+
+
 class LoginUserSchema(BaseSchema):
     username: str = UsernameField
     password: str = PasswordField

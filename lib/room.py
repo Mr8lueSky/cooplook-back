@@ -12,6 +12,8 @@ from lib.commands.server_commands import (
     FileChangeCommand,
     ServerCommand,
     UserConnectedCommand,
+    UserDisconnectedCommand,
+    UsersListCommand,
 )
 from config import ROOM_INACTIVITY_PERIOD
 from lib.connections import Connection, ConnectionsManager
@@ -53,11 +55,13 @@ class RoomStateHandler(Logging):
         exclude_id = exclude_id or []
         await self.conn_manager.send_room(cmd, exclude_id)
 
-    async def add_connection(self, conn: Connection):
-        conn_id = await self.conn_manager.add_connection(conn)
-        # _ = self.status_handler.add_suspend_by(conn_id).unsuspend_to(PauseStatus)
-        # await self.send_status_update()
-        return conn_id
+    async def add_connection(
+        self, conn: Connection, user: GetUserSchema
+    ) -> UserRoomSchema:
+        user_room = await self.conn_manager.add_connection(conn, user)
+        await self.send_user_list(user_room)
+        await self.send_user_connected(user_room)
+        return user_room
 
     async def send_change_file(self):
         await self.conn_manager.send_room(
@@ -67,9 +71,18 @@ class RoomStateHandler(Logging):
     async def send_user_connected(self, user: UserRoomSchema):
         await self.conn_manager.send_room(UserConnectedCommand(user))
 
+    async def send_user_disconnected(self, conn_id: int):
+        await self.conn_manager.send_room(UserDisconnectedCommand(conn_id))
+
+    async def send_user_list(self, user: UserRoomSchema):
+        await self.conn_manager.send_to(
+            user.conn_id, UsersListCommand(self.conn_manager.get_users())
+        )
+
     async def remove_connection(self, conn_id: int):
         self.conn_manager.remove_connection(conn_id)
         _ = self.status_handler.remove_suspend_by(conn_id).set_pause_status()
+        await self.send_user_disconnected(conn_id)
         await self.send_status_update()
 
     async def cleanup(self): ...
@@ -127,9 +140,7 @@ class Room:
     async def add_connection(
         self, conn: Connection, user_schema: GetUserSchema
     ) -> UserRoomSchema:
-        conn_id = await self.room_state_handler.add_connection(conn)
-        user_room = UserRoomSchema(conn_id=conn_id, user_data=user_schema)
-        await self.room_state_handler.send_user_connected(user_room)
+        user_room = await self.room_state_handler.add_connection(conn, user_schema)
         return user_room
 
     async def remove_connection(self, conn_id: int):
