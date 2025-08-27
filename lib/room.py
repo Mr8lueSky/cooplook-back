@@ -8,7 +8,13 @@ from lib.commands.command_handlers import (
     CommandsGroupHandler,
     StateChangeCommandsHandler,
 )
-from lib.commands.server_commands import FileChangeCommand, ServerCommand
+from lib.commands.server_commands import (
+    FileChangeCommand,
+    ServerCommand,
+    UserConnectedCommand,
+    UserDisconnectedCommand,
+    UsersListCommand,
+)
 from config import ROOM_INACTIVITY_PERIOD
 from lib.connections import Connection, ConnectionsManager
 from lib.http_exceptions import NotFound
@@ -16,7 +22,8 @@ from lib.logger import Logging, create_logger
 from models.room_model import RoomModel
 from lib.video_sources import VideoSource
 from lib.video_status.status_storage import StatusHandler
-from lib.video_status.video_statuses import PauseStatus, VideoStatus
+from lib.video_status.video_statuses import VideoStatus
+from schemas.user_schemas import GetUserSchema, UserRoomSchema
 
 monitor_logger = create_logger("RoomMonitor")
 
@@ -39,7 +46,7 @@ class RoomStateHandler(Logging):
     async def send_status_update(self):
         await self.conn_manager.send_room(self.status_handler.to_server_command())
 
-    async def handle_cmd_str(self, cmd_str: str, by: int):
+    async def handle_cmd_str(self, cmd_str: str, by: UserRoomSchema):
         async with self.status_change_lock:
             self.cmd_handler.handle_str_cmd(cmd_str, by)
             await self.send_status_update()
@@ -48,20 +55,34 @@ class RoomStateHandler(Logging):
         exclude_id = exclude_id or []
         await self.conn_manager.send_room(cmd, exclude_id)
 
-    async def add_connection(self, conn: Connection):
-        conn_id = await self.conn_manager.add_connection(conn)
-        _ = self.status_handler.add_suspend_by(conn_id).unsuspend_to(PauseStatus)
-        await self.send_status_update()
-        return conn_id
+    async def add_connection(
+        self, conn: Connection, user: GetUserSchema
+    ) -> UserRoomSchema:
+        user_room = await self.conn_manager.add_connection(conn, user)
+        await self.send_user_list(user_room)
+        await self.send_user_connected(user_room)
+        return user_room
 
     async def send_change_file(self):
         await self.conn_manager.send_room(
             FileChangeCommand(self.status_handler.current_file_ind)
         )
 
+    async def send_user_connected(self, user: UserRoomSchema):
+        await self.conn_manager.send_room(UserConnectedCommand(user))
+
+    async def send_user_disconnected(self, conn_id: int):
+        await self.conn_manager.send_room(UserDisconnectedCommand(conn_id))
+
+    async def send_user_list(self, user: UserRoomSchema):
+        await self.conn_manager.send_to(
+            user.conn_id, UsersListCommand(self.conn_manager.get_users())
+        )
+
     async def remove_connection(self, conn_id: int):
         self.conn_manager.remove_connection(conn_id)
         _ = self.status_handler.remove_suspend_by(conn_id).set_pause_status()
+        await self.send_user_disconnected(conn_id)
         await self.send_status_update()
 
     async def cleanup(self): ...
@@ -83,7 +104,7 @@ class Room:
         img_link: str,
         status_storage: StatusHandler,
         video_source: VideoSource,
-        description: str
+        description: str,
     ):
         self.room_id: UUID = room_id
         self.name: str = name
@@ -107,7 +128,7 @@ class Room:
             img_link=model.img_link,
             status_storage=StatusHandler.from_model(model),
             video_source=VideoSource.from_model(model),
-            description=model.description
+            description=model.description,
         )
 
     def update_model(self, model: RoomModel):
@@ -116,15 +137,17 @@ class Room:
         _ = self.room_state_handler.update_model(model)
         _ = self.video_source.update_model(model)
 
-    async def add_connection(self, conn: Connection) -> int:
-        conn_id = await self.room_state_handler.add_connection(conn)
-        return conn_id
+    async def add_connection(
+        self, conn: Connection, user_schema: GetUserSchema
+    ) -> UserRoomSchema:
+        user_room = await self.room_state_handler.add_connection(conn, user_schema)
+        return user_room
 
     async def remove_connection(self, conn_id: int):
         await self.room_state_handler.remove_connection(conn_id)
         self.last_leave = time.time()
 
-    async def handle_cmd_str(self, cmd_str: str, by: int):
+    async def handle_cmd_str(self, cmd_str: str, by: UserRoomSchema):
         await self.room_state_handler.handle_cmd_str(cmd_str, by)
         status = self.room_state_handler.status_handler
         if self.video_source.set_file_index(status.current_file_ind):

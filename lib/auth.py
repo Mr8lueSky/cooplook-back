@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta, timezone
-from typing import Annotated
-
+from typing import Annotated, override
+from fastapi.datastructures import Headers
+from fastapi.security.oauth2 import OAuth2PasswordBearer
+from fastapi.security.utils import get_authorization_scheme_param
 import jwt
-from fastapi import Cookie, HTTPException
+from fastapi import Depends, HTTPException, Request, WebSocket
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette import status
 
@@ -10,9 +12,39 @@ from config import ACCESS_TOKEN_EXPIRE, AUTH_SECRET_KEY
 from lib.engine import async_session_maker
 from lib.http_exceptions import NotFound
 from models.user_model import UserModel
-from schemas.user_schema import GetUserSchema
+from schemas.user_schemas import GetUserSchema
+
 
 ALGORITHM = "HS256"
+
+
+class OAuth2BearerCookie(OAuth2PasswordBearer):
+    def handle_header(self, headers: Headers):
+        authorization = headers.get("Authorization")
+        scheme, param = get_authorization_scheme_param(authorization)
+        if not authorization or scheme.lower() != "bearer":
+            return None
+        return param
+
+    def handle_cookie(self, cookies: dict[str, str]):
+        return cookies.get("token")
+
+    @override
+    async def __call__(
+        self,
+        request: Request = None,  # pyright: ignore[reportArgumentType]
+        websocket: WebSocket = None,  # pyright: ignore[reportArgumentType]
+    ) -> str | None:
+        provider = request or websocket
+        token = self.handle_header(provider.headers) or self.handle_cookie(
+            provider.cookies
+        )
+        if token is None:
+            raise HTTPException(401, "Unauthorized")
+        return token
+
+
+oauth2_scheme = OAuth2BearerCookie("auth")
 
 
 async def authenticate_user(session: AsyncSession, username: str, password: str):
@@ -24,7 +56,7 @@ async def authenticate_user(session: AsyncSession, username: str, password: str)
     return user
 
 
-def create_access_token(data: dict, expires_delta: timedelta) -> str:
+def create_access_token(data: dict[str, int | str], expires_delta: timedelta) -> str:
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + expires_delta
     to_encode["exp"] = int(expire.timestamp())
@@ -32,27 +64,18 @@ def create_access_token(data: dict, expires_delta: timedelta) -> str:
     return encoded_jwt
 
 
-async def current_user(token: Annotated[str | None, Cookie()] = None) -> GetUserSchema:
-    logout_resp = HTTPException(
-        status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/logout"}
-    )
-
-    if token is None:
-        raise HTTPException(
-            status_code=status.HTTP_303_SEE_OTHER, headers={"Location": "/login"}
-        )
-
+async def current_user(token: Annotated[str, Depends(oauth2_scheme)]) -> GetUserSchema:
+    unauthorized_resp = HTTPException(status_code=status.HTTP_401_UNAUTHORIZED)
     try:
         payload = jwt.decode(token, AUTH_SECRET_KEY, ALGORITHM)
-        username = payload.get("sub")
-        if username is None:
-            raise logout_resp
+        username: str = payload.get("sub")
     except jwt.InvalidTokenError:
-        raise logout_resp
+        raise unauthorized_resp
     async with async_session_maker.begin() as session:
-        user = await UserModel.get_name(session, username)
-    if user is None:
-        raise logout_resp
+        try:
+            user = await UserModel.get_name(session, username)
+        except NotFound:
+            raise unauthorized_resp
     return GetUserSchema.model_validate(user, from_attributes=True)
 
 

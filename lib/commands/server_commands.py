@@ -1,6 +1,9 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
+import json
 from typing import override
+
+from schemas.user_schemas import UserRoomSchema, UsersListSchema
 
 
 class ServerCommand(ABC):
@@ -39,3 +42,43 @@ class FileChangeCommand(ServerCommand):
     @override
     def to_string(self) -> str:
         return f"{self.prefix} {self.fi}"
+
+
+@dataclass
+class CurrentUsersCommand(ServerCommand):
+    users: list[UserRoomSchema]
+    prefix: str = "ua"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {json.dumps(self.users)}"
+
+
+@dataclass
+class UserConnectedCommand(ServerCommand):
+    user: UserRoomSchema
+    prefix: str = "uc"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {self.user.model_dump_json()}"
+
+
+@dataclass
+class UsersListCommand(ServerCommand):
+    users: UsersListSchema
+    prefix: str = "ua"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {self.users.model_dump_json()}"
+
+
+@dataclass
+class UserDisconnectedCommand(ServerCommand):
+    user_id: int
+    prefix: str = "ud"
+
+    @override
+    def to_string(self) -> str:
+        return f"{self.prefix} {self.user_id}"

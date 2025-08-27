@@ -93,8 +93,6 @@ class CreateRoomTorrentSchema(CreateRoomSchema, WithTorrentFileSchema): ...
 
 class GetRoomSchema(CreateRoomSchema):
     room_id: UUID
-    name: RoomNameField
-    img_link: LinkField
 
 
 class GetRoomWatchingSchema(GetRoomSchema):

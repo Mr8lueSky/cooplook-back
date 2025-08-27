@@ -81,12 +81,12 @@ class RoomModel(MappedAsDataclass, BaseModel):
             values["img_link"] = img_link
         values["description"] = description
         stmt = update(RoomModel).where(RoomModel.room_id == room_id).values(**values)
-        await session.execute(stmt)
+        _ = await session.execute(stmt)
 
     @classmethod
     async def delete(cls, session: AsyncSession, room_id: UUID):
         stmt = delete(RoomModel).where(RoomModel.room_id == room_id)
-        await session.execute(stmt)
+        _ = await session.execute(stmt)
 
     @classmethod
     async def create(
