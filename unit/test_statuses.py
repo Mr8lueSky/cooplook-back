@@ -1,5 +1,4 @@
 import pytest
-from lib.video_status.status_storage import StatusHandler
 
 
 @pytest.fixture(scope="module")

@@ -1,4 +1,3 @@
-
 import bcrypt
 from pydantic import Field
 
@@ -13,7 +12,17 @@ class GetUserSchema(BaseSchema):
     name: str = UsernameField
 
 
-class LoginUserSchema(GetUserSchema):
+class UserRoomSchema(BaseSchema):
+    conn_id: int
+    user_data: GetUserSchema
+
+
+class UsersListSchema(BaseSchema):
+    users: list[UserRoomSchema]
+
+
+class LoginUserSchema(BaseSchema):
+    username: str = UsernameField
     password: str = PasswordField
     salt: bytes = Field(
         init=False,

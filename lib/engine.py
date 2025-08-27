@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from config import DB_URL, ENV
 from lib.logger import Logging
 from models.user_model import UserModel
-from schemas.user_schema import LoginUserSchema
+from schemas.user_schemas import LoginUserSchema
 
 engine = create_async_engine(DB_URL, echo=False)
 async_session_maker = async_sessionmaker(engine, expire_on_commit=False)
@@ -25,10 +25,10 @@ async def get_session():
 async def create_users():
     if ENV == "DEV":
         async with async_session_maker.begin() as ses:
-            user = LoginUserSchema(name="admin", password="12345678")
+            user = LoginUserSchema(username="admin", password="12345678")
             try:
                 _ = await UserModel.create(
-                    ses, user.name, user.hash_password(), user.salt
+                    ses, user.username, user.hash_password(), user.salt
                 )
             except IntegrityError:
                 ...

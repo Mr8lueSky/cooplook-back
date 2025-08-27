@@ -6,6 +6,7 @@ from lib.commands.client_commands import (ClientCommand, StateChangeClientComman
                                       client_commands)
 from lib.logger import Logging
 from lib.video_status.status_storage import StatusHandler
+from schemas.user_schemas import UserRoomSchema
 
 
 class CommandTypeHandler(ABC):
@@ -53,11 +54,11 @@ class CommandsGroupHandler(CommandTypeHandler, Logging):
         handler = self.match_cmd_handler(cmd)
         handler.handle(cmd)
 
-    def handle_str_cmd(self, cmd_str: str, by: int):
+    def handle_str_cmd(self, cmd_str: str, by: UserRoomSchema):
         prefix, *args = cmd_str.split(" ")
         command = client_commands.get(prefix)
         if command is None:
             self.logger.error(f"Got unexpected command: {prefix}")
             raise RuntimeError(f"Unknown command {prefix}!")
         self.logger.debug(f"Handling {prefix} command with {command}")
-        return self.handle(command.from_arguments(args, by))
+        return self.handle(command.from_arguments(args, by.conn_id))
