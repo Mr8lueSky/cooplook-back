@@ -26,6 +26,10 @@ DEFAULT_SESSION_ARGS = {
 }
 
 
+class SetDeadlineFlags:
+    ALERT_WHEN_AVAILABLE: int = lt.deadline_flags_t.alert_when_available
+
+
 class PiecePriority(int, Enum):
     DONT_DOWNLOAD = 0
     LOWEST = 1
