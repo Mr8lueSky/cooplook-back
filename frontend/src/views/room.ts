@@ -34,7 +34,7 @@ export async function renderRoom(): Promise<void> {
       <div class="room-body">
         <div class="room-main">
           <div class="video-wrapper">
-            <video id="video-player" controls preload="metadata" crossorigin="anonymous"></video>
+            <video id="video-player" controls preload="metadata"></video>
           </div>
         </div>
         <aside class="room-sidebar">
@@ -158,15 +158,20 @@ export async function renderRoom(): Promise<void> {
   function renderUsers(): void {
     const list = document.getElementById('user-list');
     if (!list) return;
-    if (usersMap.size === 0) {
+    const uniqueNames = Array.from(new Set(usersMap.values()));
+    if (uniqueNames.length === 0) {
       list.innerHTML = '<li>No users</li>';
       return;
     }
-    const names = Array.from(usersMap.values());
-    list.innerHTML = names
+    list.innerHTML = uniqueNames
       .map((name) => '<li>' + escapeHtml(name) + '</li>')
       .join('');
   }
+
+  socket.onOpen(() => {
+    usersMap.clear();
+    renderUsers();
+  });
 
   renderUsers();
 }

@@ -36,5 +36,5 @@ async def auth(
             token = await generate_token(session, user.username, user.password)
         except (HTTPException, RequestValidationError):
             raise BadRequest("Incorrect username or password!")
-    response.set_cookie("token", token, httponly=True)
+    response.set_cookie("token", token, httponly=True, samesite="lax")
     return TokenSchema(access_token=token)
