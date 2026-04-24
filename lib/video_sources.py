@@ -1,4 +1,5 @@
 import abc
+import asyncio
 import os
 from pathlib import Path
 from typing import override
@@ -113,6 +114,7 @@ class TorrentVideoSource(VideoSource):
             self.torrent
         )
         self.file_index = -1
+        self._alert_task: asyncio.Task | None = None
         _ = self.set_file_index(file_index)
 
     @property
@@ -131,10 +133,17 @@ class TorrentVideoSource(VideoSource):
 
     def cleanup(self):
         self.torrent_manager.cleanup()
+        if self._alert_task is not None:
+            _ = self._alert_task.cancel()
+            self._alert_task = None
 
     @override
     def start(self):
         os.makedirs(self.save_path, exist_ok=True)
+        if self._alert_task is None:
+            self._alert_task = asyncio.create_task(
+                self.torrent_manager.alert_observer.observe_alerts()
+            )
 
     @override
     def cancel_current_requests(self):
