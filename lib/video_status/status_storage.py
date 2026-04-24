@@ -52,13 +52,13 @@ class StatusHandler(Logging):
         return self.set_pause_status().set_video_time(0)
 
     def set_play_status(self) -> Self:
-        if not isinstance(self.status, PauseStatus):
+        if isinstance(self.status, PlayStatus):
             return self
         self.status = PlayStatus.from_status(self.status)
         return self
 
     def set_pause_status(self) -> Self:
-        if not isinstance(self.status, PlayStatus):
+        if isinstance(self.status, PauseStatus):
             return self
         self.status = PauseStatus.from_status(self.status)
         return self
