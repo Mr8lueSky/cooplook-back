@@ -25,10 +25,15 @@ async def get_session():
 async def create_users():
     if ENV == "DEV":
         async with async_session_maker.begin() as ses:
-            user = LoginUserSchema(username="admin", password="12345678")
-            try:
-                _ = await UserModel.create(
-                    ses, user.username, user.hash_password(), user.salt
-                )
-            except IntegrityError:
-                ...
+            for username in ("admin", "admin2"):
+                user = LoginUserSchema(username=username, password="12345678")
+                try:
+                    existing = await UserModel.get_name(ses, username)
+                    existing.pwhash = str(user.hash_password(), encoding="utf-8")
+                    existing.salt = str(user.salt, encoding="utf-8")
+                except NotFound:
+                    await UserModel.create(
+                        ses, user.username, user.hash_password(), user.salt
+                    )
+                except Exception:
+                    logger.exception(f"Failed to create/update user {username}")
