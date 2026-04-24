@@ -24,8 +24,15 @@ export function setCurrentUser(user: { name: string } | null): void {
   currentUser = user;
 }
 
-export function logout(): void {
-  document.cookie = 'token=; Max-Age=0; path=/';
+export async function logout(): Promise<void> {
+  try {
+    await fetch(`${import.meta.env.VITE_API_URL || 'http://localhost:8000'}/auth/logout`, {
+      method: 'POST',
+      credentials: 'include',
+    });
+  } catch {
+    // ignore
+  }
   currentUser = null;
   window.location.hash = '#/login';
 }

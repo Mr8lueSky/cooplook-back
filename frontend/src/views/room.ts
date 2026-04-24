@@ -1,4 +1,4 @@
-import { getRoom, type RoomWatching } from '../api.ts';
+import { getRoom, getVideoUrl, type RoomWatching } from '../api.ts';
 import { navigateTo } from '../router.ts';
 import { checkAuth, logout, getCurrentUser } from '../auth.ts';
 import { connectRoomSocket, type RoomSocket } from '../ws.ts';
@@ -122,10 +122,8 @@ export async function renderRoom(): Promise<void> {
   socket = connectRoomSocket(roomId);
   void new SyncPlayer(video, roomId, socket, room.curr_fi);
 
-  if (room.video) {
-    video.src = room.video;
-    video.currentTime = 0;
-  }
+  video.src = getVideoUrl(roomId, room.curr_fi);
+  video.currentTime = 0;
 
   socket.onMessage((cmd) => {
     switch (cmd.type) {

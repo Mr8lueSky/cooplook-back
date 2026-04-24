@@ -21,7 +21,9 @@ export async function renderRooms(): Promise<void> {
   app.innerHTML = `
     <div class="rooms-layout">
       <header class="rooms-header">
-        <h1>Rooms</h1>
+        <div class="rooms-header-left">
+          <h1>Rooms</h1>
+        </div>
         <div class="rooms-actions">
           <span class="rooms-user">${getCurrentUser()?.name || ''}</span>
           <button class="secondary" id="logout-btn">Logout</button>
@@ -63,7 +65,8 @@ export async function renderRooms(): Promise<void> {
   const style = document.createElement('style');
   style.textContent = `
     .rooms-layout { padding: 1.5rem; max-width: 1200px; margin: 0 auto; }
-    .rooms-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .rooms-header { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .rooms-header-left { flex: 1; min-width: 0; }
     .rooms-header h1 { font-size: 1.5rem; font-weight: 700; }
     .rooms-actions { display: flex; align-items: center; gap: 0.75rem; }
     .rooms-user { color: var(--text-secondary); font-size: 0.9rem; }

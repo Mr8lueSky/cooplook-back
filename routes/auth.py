@@ -20,6 +20,12 @@ async def me(user: CurrentUserDep) -> GetUserSchema:
     return user
 
 
+@auth_router.post("/logout")
+async def logout(response: Response):
+    response.delete_cookie("token")
+    return {"detail": "Logged out"}
+
+
 @auth_router.post("")
 async def auth(
     user: Annotated[OAuth2PasswordRequestForm, Depends()],

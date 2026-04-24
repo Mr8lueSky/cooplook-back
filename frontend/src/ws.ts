@@ -24,7 +24,9 @@ function parseCommand(raw: string): ServerCommand {
       return { type: 'cf', fi: parseInt(payload, 10) };
     case 'ua': {
       try {
-        const users = JSON.parse(payload);
+        const parsed = JSON.parse(payload);
+        // Server may send either a plain array or {users: [...]} (UsersListSchema)
+        const users = Array.isArray(parsed) ? parsed : parsed.users;
         return { type: 'ua', users };
       } catch {
         return { type: 'unknown', raw };
