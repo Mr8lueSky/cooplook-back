@@ -5,7 +5,7 @@ from sqlalchemy import String, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Mapped, MappedAsDataclass, mapped_column
 
-from config import PW_SECRET_KET
+from config import PW_SECRET_KEY
 from lib.http_exceptions import NotFound
 from models.base import BaseModel
 
@@ -48,5 +48,5 @@ class UserModel(MappedAsDataclass, BaseModel):
         return user
 
     def verify_password(self, password: str):
-        bpassword = bytes(password, "utf-8") + bytes(self.salt, "utf-8") + PW_SECRET_KET
+        bpassword = bytes(password, "utf-8") + bytes(self.salt, "utf-8") + PW_SECRET_KEY
         return bcrypt.checkpw(bpassword, self.pwhash.encode("utf-8"))

@@ -2,8 +2,11 @@ from abc import ABC, abstractmethod
 from collections.abc import Iterable
 from typing import override
 
-from lib.commands.client_commands import (ClientCommand, StateChangeClientCommand,
-                                      client_commands)
+from lib.commands.client_commands import (
+    ClientCommand,
+    StateChangeClientCommand,
+    client_commands,
+)
 from lib.logger import Logging
 from lib.video_status.status_storage import StatusHandler
 from schemas.user_schemas import UserRoomSchema
@@ -27,7 +30,6 @@ class StateChangeCommandsHandler(CommandTypeHandler):
     def handle(self, cmd: ClientCommand):
         if not isinstance(cmd, StateChangeClientCommand):
             raise TypeError(f"{self} can't handle {cmd}!")
-
         self.handle_status_change_cmd(cmd)
 
     def handle_status_change_cmd(self, cmd: StateChangeClientCommand):
@@ -43,7 +45,7 @@ class CommandsGroupHandler(CommandTypeHandler, Logging):
             handler.handle_type: handler for handler in handlers_to_reg
         }
 
-    def match_cmd_handler(self, cmd: ClientCommand):
+    def match_cmd_handler(self, cmd: ClientCommand) -> CommandTypeHandler:
         for cmd_type, handler in self.cmd_type_to_handler.items():
             if isinstance(cmd, cmd_type):
                 return handler

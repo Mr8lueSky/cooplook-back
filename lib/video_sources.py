@@ -129,10 +129,7 @@ class TorrentVideoSource(VideoSource):
         self.file_index: int = fi
         return True
 
-    @override
     def cleanup(self):
-        super().cleanup()
-        self.cancel_current_requests()
         self.torrent_manager.cleanup()
 
     @override

@@ -1,9 +1,7 @@
 from asyncio import sleep
-import asyncio
 from collections.abc import AsyncGenerator
 import os
 from time import time
-
 
 from lib.logger import Logging
 from lib.torrent.alert_observer import AlertObserver
@@ -31,7 +29,6 @@ class FileTorrentHandler(Logging):
         )
         self.torrent.set_piece_deadline(piece_start, 0)
         self.torrent.set_piece_deadline(piece_end, 0)
-        _ = asyncio.create_task(self.alert_observer.observe_alerts())
 
     @property
     def file_path(self):
@@ -53,7 +50,7 @@ class FileTorrentHandler(Logging):
 
     def dont_download_everything(self):
         self.torrent.set_pieces_priority(
-            (piece_id, PiecePriority.DONT_DOWNLOAD)
+            (piece_id, PiecePriority.DONT_DOWNLOAD)  # pyright: ignore[reportUndefinedVariable]
             for piece_id in range(self.torrent.pieces_count())
         )
 

@@ -10,8 +10,8 @@ from models.base import BaseModel
 
 
 class VideoSourcesEnum(str, Enum):
-    torrent = 0
-    link = 1
+    torrent = "torrent"
+    link = "link"
 
 
 class RoomModel(MappedAsDataclass, BaseModel):

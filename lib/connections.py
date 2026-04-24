@@ -2,11 +2,11 @@ from asyncio import gather
 from collections.abc import Iterator
 from dataclasses import dataclass, field
 from itertools import count
-from lib.logger import Logging
 
 from fastapi import WebSocket
 
 from lib.commands.server_commands import ServerCommand
+from lib.logger import Logging
 from schemas.user_schemas import GetUserSchema, UserRoomSchema, UsersListSchema
 
 
@@ -17,16 +17,16 @@ class Connection(Logging):
     async def accept(self):
         try:
             await self.ws_conn.accept()
-        except Exception as err:
-            raise RuntimeError(f"Raise in accept: {err}")
+        except RuntimeError as err:
+            raise RuntimeError(f"Raise in accept: {err}") from err
 
-    async def recieve(self):
+    async def receive(self):
         return await self.ws_conn.receive_text()
 
     async def send(self, cmd: ServerCommand):
         try:
             await self.ws_conn.send_text(cmd.to_string())
-        except Exception as exc:
+        except RuntimeError as exc:
             self.logger.debug(f"Got exc on send; cmd: {cmd}, exc: {type(exc)} {exc}")
 
 
@@ -42,8 +42,8 @@ class ConnectionsManager:
         conn = self.conns[conn_id]
         try:
             await conn.send(cmd)
-        except Exception as exc:
-            raise RuntimeError(f"It's here: {exc}")
+        except RuntimeError as exc:
+            raise RuntimeError(f"It's here: {exc}") from exc
 
     def get_users(self) -> UsersListSchema:
         return UsersListSchema(users=list(self.conns_users.values()))
@@ -58,17 +58,18 @@ class ConnectionsManager:
         return self.conns_users[conn_id]
 
     def remove_connection(self, conn_id: int):
-        _ = self.conns.pop(conn_id)
-        _ = self.conns_users.pop(conn_id)
+        self.conns.pop(conn_id, None)
+        self.conns_users.pop(conn_id, None)
 
     async def send_room(self, cmd: ServerCommand, exclude: list[int] | None = None):
         exclude = exclude or []
-        _ = gather(
+        await gather(
             *(
                 conn.send(cmd)
                 for conn_id, conn in self.conns.items()
                 if conn_id not in exclude
-            )
+            ),
+            return_exceptions=True,
         )
 
     def conn_count(self) -> int:

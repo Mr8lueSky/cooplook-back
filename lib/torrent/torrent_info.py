@@ -1,8 +1,10 @@
 from collections.abc import Iterable
 from enum import Enum
-from lib.logger import Logging
+from pathlib import Path
+
 import libtorrent as lt
 
+from lib.logger import Logging
 
 Alert = lt.alert
 TorrentAlert = lt.torrent_alert

@@ -48,7 +48,7 @@ class ChangeFileClientCommand(StateChangeClientCommand):
         try:
             file_ind = int(args[0])
             return cls(by, file_ind)
-        except Exception as exc:
+        except (IndexError, ValueError) as exc:
             raise ParseFailedException(exc)
 
     @override
@@ -67,7 +67,7 @@ class StatusChangeClientCommand(StateChangeClientCommand, ABC):
         try:
             timestamp = float(args[0])
             return cls(by, timestamp)
-        except Exception as exc:
+        except (IndexError, ValueError) as exc:
             raise ParseFailedException(exc)
 
     @override

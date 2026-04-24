@@ -2,14 +2,20 @@
   "venv": "venv",
   "reportImplicitAbstractClass": true,
   "reportIncompatibleVariableOverride": false,
-  "pythonVersion": "3.13",
+  "pythonVersion": "3.12",
   "include": [
-    "tests"
+    "."
+  ],
+  "exclude": [
+    "venv",
+    "alembic",
+    ".claude",
+    ".aider"
   ],
   "executionEnvironments": [
     {
       "root": ".",
-      "pythonVersion": "3.13"
+      "pythonVersion": "3.12"
     }
   ]
 }
