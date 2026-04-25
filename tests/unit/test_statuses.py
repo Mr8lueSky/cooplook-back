@@ -33,8 +33,8 @@ status_flow: dict[StatusType, dict[StatusChangeFunc, StatusType]] = {
         remove_suspend_by(0): PlayStatus,
     },
     SuspendStatus: {
-        play(): PlayStatus,
-        pause(): PauseStatus,
+        play(): SuspendStatus,
+        pause(): SuspendStatus,
         add_suspend_by(0): SuspendStatus,
         remove_suspend_by(0): PlayStatus,
     },

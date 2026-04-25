@@ -54,11 +54,21 @@ class StatusHandler(Logging):
     def set_play_status(self) -> Self:
         if isinstance(self.status, PlayStatus):
             return self
+        if isinstance(self.status, SuspendStatus):
+            self.status.change_to = PlayStatus
+            return self
+        if not isinstance(self.status, PauseStatus):
+            return self
         self.status = PlayStatus.from_status(self.status)
         return self
 
     def set_pause_status(self) -> Self:
         if isinstance(self.status, PauseStatus):
+            return self
+        if isinstance(self.status, SuspendStatus):
+            self.status.change_to = PauseStatus
+            return self
+        if not isinstance(self.status, PlayStatus):
             return self
         self.status = PauseStatus.from_status(self.status)
         return self
