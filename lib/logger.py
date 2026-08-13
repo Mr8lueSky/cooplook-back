@@ -11,6 +11,10 @@ def create_logger(name: str) -> logging.Logger:
             )
         )
         logger.addHandler(handler)
+        stream_handler = logging.StreamHandler()
+        stream_handler.setFormatter(handler.formatter)
+        stream_handler.setLevel(logging.INFO)
+        logger.addHandler(stream_handler)
         logger.setLevel(logging.DEBUG)
     return logger
 

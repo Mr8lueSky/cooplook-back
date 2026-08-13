@@ -14,6 +14,7 @@ export class SyncPlayer {
   private state: PlayerState;
   private ignoreEventsUntil = 0;
   private seekDebounceTimer: ReturnType<typeof setTimeout> | null = null;
+  private pauseDebounceTimer: ReturnType<typeof setTimeout> | null = null;
   private isLocalSeeking = false;
 
   constructor(
@@ -58,20 +59,27 @@ export class SyncPlayer {
 
     v.addEventListener('pause', () => {
       if (Date.now() < this.ignoreEventsUntil) return;
-      if (!this.isLocalSeeking) {
+      if (this.isLocalSeeking) return;
+      if (this.pauseDebounceTimer) clearTimeout(this.pauseDebounceTimer);
+      this.pauseDebounceTimer = setTimeout(() => {
+        if (this.isLocalSeeking) return;
         this.socket.send(`pa ${v.currentTime.toFixed(3)}`);
-      }
+      }, 50);
     });
 
     v.addEventListener('seeking', () => {
       if (Date.now() < this.ignoreEventsUntil) return;
+      if (this.pauseDebounceTimer) {
+        clearTimeout(this.pauseDebounceTimer);
+        this.pauseDebounceTimer = null;
+      }
       this.isLocalSeeking = true;
       if (this.seekDebounceTimer) clearTimeout(this.seekDebounceTimer);
       this.socket.send(`sp ${v.currentTime.toFixed(3)}`);
     });
 
     v.addEventListener('seeked', () => {
-      if (Date.now() < this.ignoreEventsUntil) return;
+      if (!this.isLocalSeeking) return;
       if (this.seekDebounceTimer) clearTimeout(this.seekDebounceTimer);
       this.seekDebounceTimer = setTimeout(() => {
         this.socket.send(`up ${v.currentTime.toFixed(3)}`);

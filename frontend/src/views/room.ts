@@ -34,6 +34,7 @@ export async function renderRoom(): Promise<void> {
       <div class="room-body">
         <div class="room-main">
           <div class="video-wrapper">
+            <div class="player-status" id="player-status" data-state="unknown">—</div>
             <video id="video-player" controls preload="metadata"></video>
           </div>
         </div>
@@ -65,6 +66,22 @@ export async function renderRoom(): Promise<void> {
     .room-main { flex: 1; display: flex; flex-direction: column; background: #000; }
     .video-wrapper { flex: 1; display: flex; align-items: center; justify-content: center; position: relative; }
     .video-wrapper video { max-width: 100%; max-height: 100%; width: 100%; height: 100%; object-fit: contain; }
+    .player-status {
+      position: absolute; top: 8px; left: 8px; z-index: 1;
+      display: inline-flex; align-items: center; gap: 0.4rem;
+      padding: 0.25rem 0.6rem; border-radius: 999px;
+      font-size: 0.8rem; font-weight: 600; color: #fff;
+      background: rgba(0, 0, 0, 0.6); pointer-events: none;
+      backdrop-filter: blur(2px);
+    }
+    .player-status::before {
+      content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%;
+      background: #888; display: inline-block;
+    }
+    .player-status[data-state="playing"]::before { background: #2ecc71; }
+    .player-status[data-state="paused"]::before { background: #f1c40f; }
+    .player-status[data-state="suspended"]::before { background: #e67e22; }
+    .player-status[data-state="unknown"]::before { background: #888; }
     .room-sidebar { width: 240px; border-left: 1px solid var(--border); background: var(--bg-secondary); display: flex; flex-direction: column; overflow-y: auto; }
     .sidebar-section { padding: 1rem; border-bottom: 1px solid var(--border); }
     .sidebar-section h3 { font-size: 0.85rem; font-weight: 600; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 0.5rem; }
@@ -127,6 +144,18 @@ export async function renderRoom(): Promise<void> {
 
   socket.onMessage((cmd) => {
     switch (cmd.type) {
+      case 'pl':
+        console.info(`[player] play event from backend at t=${cmd.time}s`);
+        updatePlayerStatus('playing', 'Playing');
+        break;
+      case 'pa':
+        console.info(`[player] pause event from backend at t=${cmd.time}s`);
+        updatePlayerStatus('paused', 'Paused');
+        break;
+      case 'sp':
+        console.info(`[player] suspend event from backend at t=${cmd.time}s`);
+        updatePlayerStatus('suspended', 'Suspended');
+        break;
       case 'uc': {
         const u = cmd.user;
         usersMap.set(u.conn_id, u.user_data.name);
@@ -154,6 +183,13 @@ export async function renderRoom(): Promise<void> {
       }
     }
   });
+
+  function updatePlayerStatus(state: string, label: string): void {
+    const el = document.getElementById('player-status');
+    if (!el) return;
+    el.textContent = label;
+    el.setAttribute('data-state', state);
+  }
 
   function renderUsers(): void {
     const list = document.getElementById('user-list');

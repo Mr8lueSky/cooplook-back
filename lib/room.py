@@ -19,23 +19,25 @@ from lib.commands.server_commands import (
 )
 from lib.connections import Connection, ConnectionsManager
 from lib.http_exceptions import NotFound
-from lib.logger import create_logger
+from lib.logger import create_logger, Logging
 from lib.video_sources import VideoSource
 from lib.video_status.status_storage import StatusHandler
-from lib.video_status.video_statuses import VideoStatus
+from lib.video_status.video_statuses import SuspendStatus, VideoStatus
 from models.room_model import RoomModel
 from schemas.user_schemas import GetUserSchema, UserRoomSchema
 
 monitor_logger = create_logger("RoomMonitor")
 
 
-class RoomStateHandler:
+class RoomStateHandler(Logging):
     def __init__(
         self,
+        room_id: UUID,
         status_storage: StatusHandler,
         cmd_handler: CommandsGroupHandler,
         conn_manager: ConnectionsManager,
     ) -> None:
+        self.room_id: UUID = room_id
         self.status_handler: StatusHandler = status_storage
         self.cmd_handler: CommandsGroupHandler = cmd_handler
         self.conn_manager: ConnectionsManager = conn_manager
@@ -45,6 +47,14 @@ class RoomStateHandler:
         self.status_handler.update_model(model)
 
     async def send_status_update(self):
+        status = self.status_handler.status
+        state_name = status.__class__.__name__
+        if isinstance(status, SuspendStatus):
+            self.logger.info(
+                f"Room {self.room_id} is in state: {state_name} (suspended by: {status.suspend_by})"
+            )
+        else:
+            self.logger.info(f"Room {self.room_id} is in state: {state_name}")
         await self.conn_manager.send_room(self.status_handler.to_server_command())
 
     async def handle_cmd_str(self, cmd_str: str, by: UserRoomSchema):
@@ -61,8 +71,20 @@ class RoomStateHandler:
     ) -> UserRoomSchema:
         user_room = await self.conn_manager.add_connection(conn, user)
         await self.send_user_list(user_room)
+        await self.send_current_file_to(user_room.conn_id)
+        await self.send_status_to(user_room.conn_id)
         await self.send_user_connected(user_room)
         return user_room
+
+    async def send_status_to(self, conn_id: int):
+        await self.conn_manager.send_to(
+            conn_id, self.status_handler.to_server_command()
+        )
+
+    async def send_current_file_to(self, conn_id: int):
+        await self.conn_manager.send_to(
+            conn_id, FileChangeCommand(self.status_handler.current_file_ind)
+        )
 
     async def send_change_file(self):
         await self.conn_manager.send_room(
@@ -116,7 +138,7 @@ class Room:
         )
         conn_manager = ConnectionsManager()
         self.room_state_handler: RoomStateHandler = RoomStateHandler(
-            status_storage, cmd_handler, conn_manager
+            room_id, status_storage, cmd_handler, conn_manager
         )
         self.last_leave: float = time.time()
         self.description: str = description

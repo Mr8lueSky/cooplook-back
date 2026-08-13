@@ -80,7 +80,9 @@ class StatusHandler(Logging):
 
     def add_suspend_by(self, id: int) -> Self:
         if not isinstance(self.status, SuspendStatus):
+            prev_type = type(self.status)
             self.status = SuspendStatus.from_status(self.status)
+            self.status.change_to = prev_type
         _ = self.status.add_suspend_by(id)
         return self
 
