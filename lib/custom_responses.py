@@ -1,6 +1,8 @@
 import asyncio
-from asyncio import Task, sleep
-from collections.abc import Coroutine
+import hashlib
+import os
+from asyncio import Task
+from email.utils import formatdate
 from secrets import token_hex
 from typing import override
 from collections.abc import Mapping
@@ -35,14 +37,34 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         self.request: Request = request
         self.tasks: list[Task[None]] = []
         self.torrent_handler: FileTorrentHandler = torrent_handler
+        self._cancelled: bool = False
 
     def cancel(self):
+        self._cancelled = True
         for task in self.tasks:
             _ = task.cancel()
         self.tasks.clear()
 
+    @override
+    def set_stat_headers(self, stat_result: os.stat_result) -> None:
+        # Use stable headers that don't change while libtorrent writes pieces.
+        # mtime/ctime change on every write, which breaks Chrome's If-Range
+        # validation and causes range requests to fall back to whole-file 200.
+        file_size = self.torrent_handler.torrent.file_size(
+            self.torrent_handler.file_index
+        )
+        self.headers.setdefault("content-length", str(file_size))
+        etag_base = self.torrent_handler.file_path + "-" + str(file_size)
+        etag = f'"{hashlib.md5(etag_base.encode(), usedforsecurity=False).hexdigest()}"'
+        self.headers.setdefault("etag", etag)
+        # Derive a stable last-modified from the path hash (constant per file).
+        path_hash = int(hashlib.md5(self.torrent_handler.file_path.encode(), usedforsecurity=False).hexdigest(), 16)
+        self.headers.setdefault("last-modified", formatdate(path_hash % 1700000000, usegmt=True))
+
     async def _download_range(self, start: int, end: int):
         async for buffer in self.torrent_handler.iter_pieces(start, end):
+            if self._cancelled:
+                break
             yield buffer, True
             await asyncio.sleep(0)
         yield b"", False
@@ -53,26 +75,6 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
                 {"type": "http.response.body", "body": body, "more_body": more_body}
             )
         self.logger.debug(f"Request {start}-{end} fully finished")
-
-    async def _download_range_cancellable(self, send: Send, start: int, end: int):
-        async with asyncio.TaskGroup() as tg:
-            task = tg.create_task(self._download_single_range(send, start, end))
-            self.tasks.append(task)
-            while not await self.request.is_disconnected() and self.tasks:
-                await sleep(1)
-            if await self.request.is_disconnected():
-                self.logger.debug("Request disconnected by client")
-            self.cancel()
-
-    async def _cancellable_coroutine(self, coroutine: Coroutine[None, None, None]):
-        async with asyncio.TaskGroup() as tg:
-            task = tg.create_task(coroutine)
-            self.tasks.append(task)
-            while not await self.request.is_disconnected() and self.tasks:
-                await sleep(1)
-            if await self.request.is_disconnected():
-                self.logger.debug("Request disconnected by client")
-            self.cancel()
 
     async def _download_multiple_ranges(
         self, send: Send, ranges: list[tuple[int, int]]
@@ -94,17 +96,17 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
 
     @override
     async def _handle_simple(self, send: Send, send_header_only: bool) -> None:
+        file_size = self.torrent_handler.torrent.file_size(
+            self.torrent_handler.file_index
+        )
+        self.headers["content-length"] = str(file_size)
         await send(
-            {
-                "type": "http.response.start",
-                "status": self.status_code,
-                "headers": self.raw_headers,
-            }
+            {"type": "http.response.start", "status": self.status_code, "headers": self.raw_headers}
         )
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            await self._cancellable_coroutine(self._download_single_range(send, 0, -1))
+            await self._download_single_range(send, 0, file_size)
 
     @override
     async def _handle_single_range(
@@ -118,9 +120,7 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            await self._cancellable_coroutine(
-                self._download_single_range(send, start, end)
-            )
+            await self._download_single_range(send, start, end)
 
     @override
     async def _handle_multiple_ranges(
@@ -143,6 +143,4 @@ class LoadingTorrentFileResponse(FileResponse, Logging):
         if send_header_only:
             await send({"type": "http.response.body", "body": b"", "more_body": False})
         else:
-            await self._cancellable_coroutine(
-                self._download_multiple_ranges(send, ranges)
-            )
+            await self._download_multiple_ranges(send, ranges)

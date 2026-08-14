@@ -8,7 +8,7 @@ from lib.torrent.alert_observer import AlertObserver
 from lib.torrent.piece_getter import PieceGetter
 from lib.torrent.torrent_info import PiecePriority, TorrentInfo
 
-WAIT_FILE_READY_SLEEP = 0
+WAIT_FILE_READY_SLEEP = 0.1
 
 
 class FileTorrentHandler(Logging):

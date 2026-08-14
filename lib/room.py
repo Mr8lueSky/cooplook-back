@@ -70,9 +70,10 @@ class RoomStateHandler(Logging):
         self, conn: Connection, user: GetUserSchema
     ) -> UserRoomSchema:
         user_room = await self.conn_manager.add_connection(conn, user)
+        self.status_handler.add_suspend_by(user_room.conn_id)
         await self.send_user_list(user_room)
         await self.send_current_file_to(user_room.conn_id)
-        await self.send_status_to(user_room.conn_id)
+        await self.send_status_update()
         await self.send_user_connected(user_room)
         return user_room
 

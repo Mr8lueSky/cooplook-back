@@ -6,7 +6,7 @@ from typing import Callable
 from lib.logger import Logging
 from lib.torrent.torrent_info import Alert, TorrentInfo
 
-OBSERVE_ALERTS_SLEEP = 0
+OBSERVE_ALERTS_SLEEP = 0.1
 
 AlertType = type[Alert]
 NotifyAlert = Callable[[Alert], None]

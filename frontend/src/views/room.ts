@@ -35,7 +35,7 @@ export async function renderRoom(): Promise<void> {
         <div class="room-main">
           <div class="video-wrapper">
             <div class="player-status" id="player-status" data-state="unknown">—</div>
-            <video id="video-player" controls preload="metadata"></video>
+            <video id="video-player" controls preload="auto"></video>
           </div>
         </div>
         <aside class="room-sidebar">

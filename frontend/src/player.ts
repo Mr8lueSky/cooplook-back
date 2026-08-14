@@ -54,6 +54,7 @@ export class SyncPlayer {
 
     v.addEventListener('play', () => {
       if (Date.now() < this.ignoreEventsUntil) return;
+      this.socket.send(`up ${v.currentTime.toFixed(3)}`);
       this.socket.send(`pl ${v.currentTime.toFixed(3)}`);
     });
 
