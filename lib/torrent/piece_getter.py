@@ -28,7 +28,6 @@ class PieceGetter:
     def __init__(self, torrent: TorrentInfo, alert_observer: AlertObserver) -> None:
         self.piece_wait_count: dict[int, int] = {}
         self.piece_buffer: dict[int, bytes] = {}
-        self.read_in_flight: set[int] = set()
         self.piece_cache: OrderedDict[int, bytes] = OrderedDict()
         self.torrent: TorrentInfo = torrent
         self.alert_observer: AlertObserver = alert_observer
@@ -50,7 +49,6 @@ class PieceGetter:
             raise RuntimeError(
                 f"Alert is not a type of read_piece_alert! Actual type: {type(alert)}"
             )
-        self.read_in_flight.discard(alert.piece)
         if alert.error.value() != 0 or alert.size <= 0 or alert.buffer is None:
             return
         buf = bytes(alert.buffer)
@@ -70,20 +68,10 @@ class PieceGetter:
         while len(self.piece_cache) > PIECE_CACHE_SIZE:
             self.piece_cache.popitem(last=False)
 
-    def _issue_read(self, piece_id: int) -> None:
-        if piece_id in self.read_in_flight:
-            return
-        if self._has_piece(piece_id):
-            return
-        self.read_in_flight.add(piece_id)
-        self.torrent.read_piece(piece_id)
-
     async def wait_piece_read(self, piece_id: int, timeout_s: int = 60, retries: int = 2):
         for attempt in range(retries + 1):
             if self._has_piece(piece_id):
                 return
-            if self.torrent.have_piece(piece_id):
-                self._issue_read(piece_id)
             finish = time() + timeout_s
             while time() < finish:
                 if self._has_piece(piece_id):
@@ -100,20 +88,20 @@ class PieceGetter:
         )
 
     def require_piece(self, piece_id: int, in_s: int = 0):
-        self.piece_wait_count[piece_id] = self.piece_wait_count.get(piece_id, 0) + 1
-        self.torrent.set_piece_deadline(
-            piece_id, in_s, SetDeadlineFlags.ALERT_WHEN_AVAILABLE
-        )
+        count = self.piece_wait_count.get(piece_id, 0)
+        self.piece_wait_count[piece_id] = count + 1
+        if count == 0:
+            self.torrent.set_piece_deadline(
+                piece_id, in_s, SetDeadlineFlags.ALERT_WHEN_AVAILABLE
+            )
 
     def not_require_piece(self, piece_id: int):
-        if self.piece_wait_count:
-            self.piece_wait_count[piece_id] = max(
-                0, self.piece_wait_count.get(piece_id, 0) - 1
-            )
+        self.piece_wait_count[piece_id] = max(
+            0, self.piece_wait_count.get(piece_id, 0) - 1
+        )
         if self.piece_wait_count.get(piece_id, 0) <= 0:
             _ = self.piece_wait_count.pop(piece_id, None)
             _ = self.piece_buffer.pop(piece_id, None)
-            self.read_in_flight.discard(piece_id)
 
     async def get_piece(self, piece_id: int) -> bytes:
         try:
